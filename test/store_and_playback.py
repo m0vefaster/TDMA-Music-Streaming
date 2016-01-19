@@ -8,7 +8,6 @@ from argparse import ArgumentParser
 def get_info(audio_file, main_args):
     """
     create a dictionary of information for the audiofile object.
-
     """
     info = {}
     info["channels"] = audio_file.channels()
@@ -48,7 +47,7 @@ def main():
     main_args = parser.parse_args()
 
     #open audio file as an AudioFile object
-    audio_file =  open("files/2.wav")
+    audio_file =  open("../files/2.wav")
     file_info = get_info(audio_file, main_args)
 
     #Creates a WaveReader object from the AudioFile Object
@@ -84,7 +83,7 @@ def main():
 
     #noise_file.close()
 
-    noise_output = wave.open('files/noise.wav', 'w')
+    noise_output = wave.open('../files/noise.wav', 'w')
     noise_output.setparams((2, 2, 44100, 0, 'NONE', 'not compressed'))
 
     for d in list(output_framelist):
