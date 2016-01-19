@@ -48,31 +48,23 @@ def main():
     )
 
     main_args = parser.parse_args()
+    
+    ifile = wave.open("../files/9.wav","r")
+    sampwidth = ifile.getsampwidth()
+    fmts = (None, "=B", "=h", None, "=l")
+    fmt = fmts[sampwidth]
+    dcs  = (None, 128, 0, None, 0)
+    dc = dcs[sampwidth]
 
-    #open audio file as an AudioFile object
-    audio_file =  open("../files/2.wav")
-    file_info = get_info(audio_file, main_args)
+    output_framelist = []
+    for i in range(ifile.getnframes()):
+	iframe = ifile.readframes(1)
+	iframe = struct.unpack(fmt, iframe)[0]
+	iframe -= dc
+	output_framelist.append(iframe)
 
-    #Creates a WaveReader object from the AudioFile Object
-    pcm_data = audio_file.to_pcm()
+    ifile.close()
 
-    #Creates a FrameList object from WaveReader object. Currently reads all
-    #frames in file
-    frame_list = pcm_data.read(file_info["frames"])
-
-    #Convert samples to floats (-1.0 - +1.0)
-    float_frame_list = frame_list.to_float()
-
-    #print float_frame_list.frame(0)
-    f = pcm.from_list(frame_list,2,16,True)
-    #print list(f)
-
-    #eventually do some signal processing here...
-
-    #Convert back to integer FrameList
-    output_framelist = float_frame_list.to_int(file_info["bits"])
-    #print list(output_framelist)
-    #To convert back use f = from_list([-1,0,1,2],2,16,True) where the list is going to be the data received
     s = socket.socket()
     host = 'localhost'
     port = 50007

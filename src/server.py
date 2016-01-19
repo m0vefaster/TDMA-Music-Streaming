@@ -30,13 +30,24 @@ def main():
     output_framelist = pickle.loads(data)
     #conn.close()
 
-    noise_output = wave.open('../files/noise.wav', 'w')
-    noise_output.setparams((2, 2, 44100, 0, 'NONE', 'not compressed'))
+    ifile = wave.open("../files/9.wav","r")
+    ofile = wave.open("../files/noise.wav", "w")
+    ofile.setparams(ifile.getparams())
 
-    for d in list(output_framelist):
-        packed_value = struct.pack('h', d)
-        noise_output.writeframes(packed_value)
-        #noise_output.writeframes(packed_value)
+    sampwidth = ifile.getsampwidth()
+    fmts = (None, "=B", "=h", None, "=l")
+    fmt = fmts[sampwidth]
+    dcs  = (None, 128, 0, None, 0)
+    dc = dcs[sampwidth]
+
+    for iframe in output_framelist:
+	    oframe = iframe / 2;
+	    oframe += dc
+	    oframe = struct.pack(fmt, oframe)
+	    ofile.writeframes(oframe)
+
+    ifile.close()
+    ofile.close()
 
 if __name__ == "__main__":
     main()
