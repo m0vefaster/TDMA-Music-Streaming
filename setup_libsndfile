@@ -1,0 +1,6 @@
+./configure --prefix=$HOME/local
+make clean
+make
+make install
+export LD_LIBRARY_PATH=$HOME/local/lib
+gcc -I $HOME/local/include -L $HOME/local/lib -lsndfile read.c -o read.c
