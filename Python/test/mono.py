@@ -3,7 +3,7 @@
 import wave # 1
 import struct
 
-ifile = wave.open("../files/9.wav","r")
+ifile = wave.open("../files/8.wav","r")
 ofile = wave.open("../files/noise.wav", "w")
 ofile.setparams(ifile.getparams())
 
