@@ -7,46 +7,55 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <unistd.h>
+#include <netdb.h>
+
 
 void sendData(short *buffer,int len) {
   int sock;
-  struct sockaddr_in servAddr;
-  unsigned short servPort;
+  char *servPort;
   char *servIP;
   char *fileName;
   int bytesRcvd, totalBytesRcvd;
 
   servIP = "192.168.1.33" ;
-  servPort = atoi("7000");
+  servPort = "7000";
 
-  /* Create a reliable, stream socket using TCP */
-  if ((sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0){
-	printf("\nFailed to form a socket\n");
+  // Tell the system what kind(s) of address info we want
+  struct addrinfo addrCriteria;                   // Criteria for address match
+  memset(&addrCriteria, 0, sizeof(addrCriteria)); // Zero out structure
+  addrCriteria.ai_family = AF_UNSPEC;             // Any address family
+  // For the following fields, a zero value means "don't care"
+  addrCriteria.ai_socktype = SOCK_DGRAM;          // Only datagram sockets
+  addrCriteria.ai_protocol = IPPROTO_UDP;         // Only UDP protocol
+
+  // Get address(es)
+  struct addrinfo *servAddr; // List of server addresses
+  int rtnVal = getaddrinfo(servIP, servPort, &addrCriteria, &servAddr);
+  if (rtnVal != 0){
+	printf("getaddrinfo() failed");
 	exit(1);
   }
 
-  /* Construct the server address structure */
-  memset(&servAddr, 0, sizeof(servAddr));
-  servAddr.sin_family = AF_INET;
-  servAddr.sin_addr.s_addr = inet_addr(servIP);
-  servAddr.sin_port = htons(servPort); /* Server port */
-
-  /* Establish the connection */
-  if (connect(sock, (struct sockaddr *) &servAddr, sizeof(servAddr)) < 0){
-	printf("\nFailed to connect to server\n");
-	exit(1);
-   }
-
-  printf("\nConnected\n");
+  // Create a datagram/UDP socket
+  sock = socket(servAddr->ai_family, servAddr->ai_socktype,
+      servAddr->ai_protocol); // Socket descriptor for client
+  if (sock < 0){
+	printf("socket() failed");
+  }
 
   /* Send the string to the server */
   int i;
   for (i=0;i<len;i++){
-  	if (send(sock, &buffer[i],sizeof(short),0) != sizeof(short)){
-		printf("\nNot enough data was sent\n");
-		exit(1);
-	}
+
       //printf("\nSent %d %d", (i+1), buffer[i]);
+      // Send the string to the server
+      ssize_t numBytes = sendto(sock, &buffer[i], sizeof(short) , 0,
+      servAddr->ai_addr, servAddr->ai_addrlen);
+      if (numBytes < 0){
+	printf("\nNot enough data was sent\n");  
+                exit(1);
+     }
   }
 
   printf("\nNunber of samples sent is:%d", len);
