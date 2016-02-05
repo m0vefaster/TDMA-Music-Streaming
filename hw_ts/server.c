@@ -11,76 +11,67 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <unistd.h> 
+#include <netdb.h>
 
 #define len 120001
 
-void HandleTCPClient(int clntSocket, short *samples) {
-  int i;
-  for (i = 0; i < len; i++) {
-        int bytesreceived = recv(clntSocket, &samples[i], sizeof(short), /* flags */ 0);
-
-        if (bytesreceived <= 0) {
-		printf("\n Received: %d \n",bytesreceived);
-		exit(1);
-        }
-	printf("\n%d %d", i+1,samples[i]);
-    }
-   printf("\n Exiting HandleTCPClient");
-}
-
 void getSamples(short *samples) {
+  char *service = "7000"; // First arg:  local port/service
 
-  in_port_t servPort = atoi("7000"); // First arg:  local port
+  // Construct the server address structure
+  struct addrinfo addrCriteria;                   // Criteria for address
+  memset(&addrCriteria, 0, sizeof(addrCriteria)); // Zero out structure
+  addrCriteria.ai_family = AF_UNSPEC;             // Any address family
+  addrCriteria.ai_flags = AI_PASSIVE;             // Accept on any address/port
+  addrCriteria.ai_socktype = SOCK_DGRAM;          // Only datagram socket
+  addrCriteria.ai_protocol = IPPROTO_UDP;         // Only UDP socket
+
+  struct addrinfo *servAddr; // List of server addresses
+  int rtnVal = getaddrinfo(NULL, service, &addrCriteria, &servAddr);
+  if (rtnVal != 0){
+    printf("getaddrinfo() failed");
+    exit(1);
+   }
 
   // Create socket for incoming connections
-  int servSock; // Socket descriptor for server
-  if ((servSock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
+  int sock = socket(servAddr->ai_family, servAddr->ai_socktype,
+      servAddr->ai_protocol);
+  if (sock < 0){
+	printf("Socket() failed");
 	exit(1);
-
-  // Construct local address structure
-  struct sockaddr_in servAddr;                  // Local address
-  memset(&servAddr, 0, sizeof(servAddr));       // Zero out structure
-  servAddr.sin_family = AF_INET;                // IPv4 address family
-  servAddr.sin_addr.s_addr = htonl(INADDR_ANY); // Any incoming interface
-  servAddr.sin_port = htons(servPort);          // Local port
+  }
 
   // Bind to the local address
-  if (bind(servSock, (struct sockaddr*) &servAddr, sizeof(servAddr)) < 0){
-	printf("\nBind failed\n");
-	exit(1);
+  if (bind(sock, servAddr->ai_addr, servAddr->ai_addrlen) < 0){
+	printf("bind() failed");
+  	exit(1);
   }
 
-  // Mark the socket so it will listen for incoming connections
-  if (listen(servSock, 5) < 0){
-	printf("\nListening on port failed\n");
-	exit(1);
-  }
+  // Free address list allocated by getaddrinfo()
+  freeaddrinfo(servAddr);
 
-  for (;;) { 
-	// Run forever
-    	struct sockaddr_in clntAddr; // Client address
-	// Set length of client address structure (in-out parameter)
-	socklen_t clntAddrLen = sizeof(clntAddr);
 
-	// Wait for a client to connect
-	int clntSock = accept(servSock, (struct sockaddr *) &clntAddr, &clntAddrLen);
-	if (clntSock < 0){
-		printf("\nClient Socket is %d\n",clntSock);
+  int i;
+  for (i = 0; i < len; i++) {
+	struct sockaddr_storage clntAddr; // Client address
+    	// Set Length of client address structure (in-out parameter)
+    	socklen_t clntAddrLen = sizeof(clntAddr);
+
+    	// Block until receive message from a client
+    	int numBytesRcvd = recvfrom(sock, &samples[i], sizeof(short), 0,
+        	(struct sockaddr *) &clntAddr, &clntAddrLen);
+
+	if (numBytesRcvd < 0){
+		printf("\n Received: %d \n",numBytesRcvd);
 		exit(1);
-	}
+        }
+	printf("\nNumber of bytes received is %d", numBytesRcvd);
 
-	// clntSock is connected to a client!
+	printf("\n%d %hu", i+1,samples[i]);
+    }
 
-	char clntName[INET_ADDRSTRLEN]; // String to contain client address
-	if (inet_ntop(AF_INET, &clntAddr.sin_addr.s_addr, clntName,sizeof(clntName)) != NULL)
-		printf("Handling client %s/%d\n", clntName, ntohs(clntAddr.sin_port));
-	else
-		puts("Unable to get client address");
-
-	HandleTCPClient(clntSock, samples);
 	printf("\n Exiting getSamples"); 
 	return;
-    }
 }
 
 int main(int argc, char *argv[])
