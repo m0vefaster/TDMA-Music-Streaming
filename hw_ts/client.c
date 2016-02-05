@@ -56,10 +56,12 @@ void sendData(short *buffer,int len) {
 	printf("\nNot enough data was sent\n");  
                 exit(1);
      }
+    //TODO: Remove sleep and check what is wrong
+    usleep(1);
   }
 
   printf("\nNunber of samples sent is:%d", len);
- 
+  sleep(100); 
   close(sock);
   exit(0);
 }
@@ -105,11 +107,10 @@ int main(int argc, char *argv[])
 	// Load data
 	long numFrames = sf_read_short(sndFile, buffer, sndInfo.frames);
 
-	/*
 	// Print Samples/Frames
-	for (int i=0;i<numFrames;i++)
+  	int i;	
+	for (i=0;i<numFrames;i++)
 		printf("%d %hu\n", (i+1), buffer[i]);
-	*/
 
 	// Check correct number of samples loaded
 	if (numFrames != sndInfo.frames) {
