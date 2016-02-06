@@ -125,7 +125,7 @@ void sendData(short *buffer,int numFrames,int argc, char *argv[]) {
 	// Tell the system what kind(s) of address info we want
 	struct addrinfo addrCriteria;                   // Criteria for address match
 	memset(&addrCriteria, 0, sizeof(addrCriteria)); // Zero out structure
-	addrCriteria.ai_family = AF_UNSPEC;             // Any address family
+	addrCriteria.ai_family = PF_INET;             // Any address family
 	// For the following fields, a zero value means "don't care"
 	addrCriteria.ai_socktype = SOCK_DGRAM;          // Only datagram sockets
 	addrCriteria.ai_protocol = IPPROTO_UDP;         // Only UDP protocol
