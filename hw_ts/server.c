@@ -13,7 +13,46 @@
 #include <unistd.h> 
 #include <netdb.h>
 
-#define len 120001
+#include <sys/time.h>
+#include <sys/select.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+
+
+#include <asm/types.h>
+#include <linux/net_tstamp.h>
+#include <linux/errqueue.h>
+
+
+#define numFrames 120001
+
+
+static void usage(const char *error)
+{
+	if (error)
+		printf("invalid option: %s\n", error);
+	printf("timestamping interface option*\n\n"
+	       "Options:\n"
+	       "  IP_MULTICAST_LOOP - looping outgoing multicasts\n"
+	       "  SO_TIMESTAMP - normal software time stamping, ms resolution\n"
+	       "  SO_TIMESTAMPNS - more accurate software time stamping\n"
+	       "  SOF_TIMESTAMPING_TX_HARDWARE - hardware time stamping of outgoing packets\n"
+	       "  SOF_TIMESTAMPING_TX_SOFTWARE - software fallback for outgoing packets\n"
+	       "  SOF_TIMESTAMPING_RX_HARDWARE - hardware time stamping of incoming packets\n"
+	       "  SOF_TIMESTAMPING_RX_SOFTWARE - software fallback for incoming packets\n"
+	       "  SOF_TIMESTAMPING_SOFTWARE - request reporting of software time stamps\n"
+	       "  SOF_TIMESTAMPING_RAW_HARDWARE - request reporting of raw HW time stamps\n"
+	       "  SIOCGSTAMP - check last socket time stamp\n"
+	       "  SIOCGSTAMPNS - more accurate socket time stamp\n");
+	exit(1);
+}
+
+static void bail(const char *error)
+{
+	printf("%s\n", error);
+	exit(1);
+}
+
 
 static void printpacket(struct msghdr *msg, int res,
 			char *data,
@@ -165,19 +204,60 @@ static short recvpacket(int sock, int recvmsg_flags,
 		//short p = (data[1] << 8) + data[2];
 		printf("\nData is :%hu\n", data);
 		//printf("\nData is :%s",*entry.iov_base);
-		/*
-		printpacket(&msg, res, data,
-			    sock, recvmsg_flags,
-			    siocgstamp, siocgstampns);
-		*/
+		if (recvmsg_flags==0)
+			printpacket(&msg, res, "heello",sock, recvmsg_flags,siocgstamp, siocgstampns);
 		return data;
 	}
 }
 
-void getSamples(short *samples) {
+void getSamples(short *samples, int argc, char *argv[]) {
   char *service = "7000"; // First arg:  local port/service
+	int so_timestamping_flags = 0;
+	int so_timestamp = 0;
+	int so_timestampns = 0;
+	int siocgstamp = 0;
+	int siocgstampns = 0;
+	int ip_multicast_loop = 0;
 
-  // Construct the server address structure
+	int enabled=1;
+	int val;
+	socklen_t len;
+   	int i;
+	char *interface;
+	struct ifreq device;
+	struct ifreq hwtstamp;
+	struct hwtstamp_config hwconfig, hwconfig_requested;
+
+		
+	interface = argv[2];
+   for (i = 3; i < argc; i++) {
+		if (!strcasecmp(argv[i], "SO_TIMESTAMP"))
+			so_timestamp = 1;
+		else if (!strcasecmp(argv[i], "SO_TIMESTAMPNS"))
+			so_timestampns = 1;
+		else if (!strcasecmp(argv[i], "SIOCGSTAMP"))
+			siocgstamp = 1;
+		else if (!strcasecmp(argv[i], "SIOCGSTAMPNS"))
+			siocgstampns = 1;
+		else if (!strcasecmp(argv[i], "IP_MULTICAST_LOOP"))
+			ip_multicast_loop = 1;
+		else if (!strcasecmp(argv[i], "SOF_TIMESTAMPING_TX_HARDWARE"))
+			so_timestamping_flags |= SOF_TIMESTAMPING_TX_HARDWARE;
+		else if (!strcasecmp(argv[i], "SOF_TIMESTAMPING_TX_SOFTWARE"))
+			so_timestamping_flags |= SOF_TIMESTAMPING_TX_SOFTWARE;
+		else if (!strcasecmp(argv[i], "SOF_TIMESTAMPING_RX_HARDWARE"))
+			so_timestamping_flags |= SOF_TIMESTAMPING_RX_HARDWARE;
+		else if (!strcasecmp(argv[i], "SOF_TIMESTAMPING_RX_SOFTWARE"))
+			so_timestamping_flags |= SOF_TIMESTAMPING_RX_SOFTWARE;
+		else if (!strcasecmp(argv[i], "SOF_TIMESTAMPING_SOFTWARE"))
+			so_timestamping_flags |= SOF_TIMESTAMPING_SOFTWARE;
+		else if (!strcasecmp(argv[i], "SOF_TIMESTAMPING_RAW_HARDWARE"))
+			so_timestamping_flags |= SOF_TIMESTAMPING_RAW_HARDWARE;
+		else
+			usage(argv[i]);
+   }
+
+	  // Construct the server address structure
   struct addrinfo addrCriteria;                   // Criteria for address
   memset(&addrCriteria, 0, sizeof(addrCriteria)); // Zero out structure
   addrCriteria.ai_family = AF_UNSPEC;             // Any address family
@@ -209,9 +289,51 @@ void getSamples(short *samples) {
   // Free address list allocated by getaddrinfo()
   freeaddrinfo(servAddr);
 
+	/* set socket options for time stamping */
+	if (so_timestamp &&
+		setsockopt(sock, SOL_SOCKET, SO_TIMESTAMP,
+			   &enabled, sizeof(enabled)) < 0)
+		bail("setsockopt SO_TIMESTAMP");
 
-  int i;
-  for (i = 0; i < len; i++) {
+	if (so_timestampns &&
+		setsockopt(sock, SOL_SOCKET, SO_TIMESTAMPNS,
+			   &enabled, sizeof(enabled)) < 0)
+		bail("setsockopt SO_TIMESTAMPNS");
+
+	if (so_timestamping_flags &&
+		setsockopt(sock, SOL_SOCKET, SO_TIMESTAMPING,
+			   &so_timestamping_flags,
+			   sizeof(so_timestamping_flags)) < 0)
+		bail("setsockopt SO_TIMESTAMPING");
+
+	/* request IP_PKTINFO for debugging purposes */
+	if (setsockopt(sock, SOL_IP, IP_PKTINFO,
+		       &enabled, sizeof(enabled)) < 0)
+		printf("\nError:setsockopt IP_PKTINFO");
+
+	/* verify socket options */
+	len = sizeof(val);
+	if (getsockopt(sock, SOL_SOCKET, SO_TIMESTAMP, &val, &len) < 0)
+		printf("\n%s\n", "getsockopt SO_TIMESTAMP");
+	else
+		printf("SO_TIMESTAMP %d\n", val);
+
+	if (getsockopt(sock, SOL_SOCKET, SO_TIMESTAMPNS, &val, &len) < 0)
+		printf("\n%s\n", "getsockopt SO_TIMESTAMPNS");
+	else
+		printf("SO_TIMESTAMPNS %d\n", val);
+
+	if (getsockopt(sock, SOL_SOCKET, SO_TIMESTAMPING, &val, &len) < 0) {
+		printf("\n%s\n", "getsockopt SO_TIMESTAMPING");
+	} else {
+		printf("SO_TIMESTAMPING %d\n", val);
+		if (val != so_timestamping_flags)
+			printf("   not the expected value %d\n",
+			       so_timestamping_flags);
+	}
+
+
+  for (i = 0; i < numFrames; i++) {
 	struct sockaddr_storage clntAddr; // Client address
     	// Set Length of client address structure (in-out parameter)
     	socklen_t clntAddrLen = sizeof(clntAddr);
@@ -228,7 +350,7 @@ void getSamples(short *samples) {
 	printf("\nNumber of bytes received is %d", numBytesRcvd);
 	*/
 	samples[i] = recvpacket(sock, 0, 1, 1);//siocgstamp,siocgstampns are 1 here
-	
+
 	printf("\n%d %hu", i+1,samples[i]);
     }
 
@@ -239,15 +361,15 @@ void getSamples(short *samples) {
 int main(int argc, char *argv[])
 {
 	printf("Wav Write Test\n");
-	if (argc != 2) {
+	if (argc < 2) {
 		fprintf(stderr, "Expecting wav file as argument\n");
 		return 1;
 	}
 
-	short samples[len];
-  	memset(samples, 0, len);
+	short samples[numFrames];
+  	memset(samples, 0, numFrames);
 	printf("\n Getting the Samples");
-	getSamples(samples);
+	getSamples(samples,argc,argv);
         printf("\n Got the Samples. Writing to File\n");	
 	// Write to a new file
 	SF_INFO sfinfo_w ;
@@ -256,7 +378,7 @@ int main(int argc, char *argv[])
     	sfinfo_w.format = SF_FORMAT_WAV | SF_FORMAT_PCM_16;
 	
 	SNDFILE *sndFile_w = sf_open(argv[1], SFM_WRITE, &sfinfo_w);
-	sf_count_t count_w = sf_write_short(sndFile_w, samples, len) ;
+	sf_count_t count_w = sf_write_short(sndFile_w, samples, numFrames) ;
     	sf_write_sync(sndFile_w);
     	sf_close(sndFile_w);
 
