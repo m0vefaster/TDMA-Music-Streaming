@@ -121,9 +121,30 @@ void sendData(short *buffer,int numFrames,int argc, char *argv[]) {
 	}
 
 	printf("\nInterface selected is :%s", interface);
-	sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	if (sock < 0)
-		bail("socket");
+
+	// Tell the system what kind(s) of address info we want
+	struct addrinfo addrCriteria;                   // Criteria for address match
+	memset(&addrCriteria, 0, sizeof(addrCriteria)); // Zero out structure
+	addrCriteria.ai_family = AF_UNSPEC;             // Any address family
+	// For the following fields, a zero value means "don't care"
+	addrCriteria.ai_socktype = SOCK_DGRAM;          // Only datagram sockets
+	addrCriteria.ai_protocol = IPPROTO_UDP;         // Only UDP protocol
+
+	// Get address(es)
+	struct addrinfo *servAddr; // List of server addresses
+	int rtnVal = getaddrinfo(servIP, servPort, &addrCriteria, &servAddr);
+	if (rtnVal != 0){
+	printf("getaddrinfo() failed");
+	exit(1);
+	}
+
+	// Create a datagram/UDP socket
+	sock = socket(servAddr->ai_family, servAddr->ai_socktype,
+	servAddr->ai_protocol); // Socket descriptor for client
+	if (sock < 0){
+	printf("socket() failed");
+	}
+
 
 	memset(&device, 0, sizeof(device));
 	strncpy(device.ifr_name, interface, sizeof(device.ifr_name));
@@ -153,30 +174,6 @@ void sendData(short *buffer,int numFrames,int argc, char *argv[]) {
 	printf("SIOCSHWTSTAMP: tx_type %d requested, got %d; rx_filter %d requested, got %d\n",
 	       hwconfig_requested.tx_type, hwconfig.tx_type,
 	       hwconfig_requested.rx_filter, hwconfig.rx_filter);
-
-
-	// Tell the system what kind(s) of address info we want
-	struct addrinfo addrCriteria;                   // Criteria for address match
-	memset(&addrCriteria, 0, sizeof(addrCriteria)); // Zero out structure
-	addrCriteria.ai_family = AF_UNSPEC;             // Any address family
-	// For the following fields, a zero value means "don't care"
-	addrCriteria.ai_socktype = SOCK_DGRAM;          // Only datagram sockets
-	addrCriteria.ai_protocol = IPPROTO_UDP;         // Only UDP protocol
-
-	// Get address(es)
-	struct addrinfo *servAddr; // List of server addresses
-	int rtnVal = getaddrinfo(servIP, servPort, &addrCriteria, &servAddr);
-	if (rtnVal != 0){
-	printf("getaddrinfo() failed");
-	exit(1);
-	}
-
-	// Create a datagram/UDP socket
-	sock = socket(servAddr->ai_family, servAddr->ai_socktype,
-	servAddr->ai_protocol); // Socket descriptor for client
-	if (sock < 0){
-	printf("socket() failed");
-	}
 
 	/* set socket options for time stamping */
 	if (so_timestamp &&
