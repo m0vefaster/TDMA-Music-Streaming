@@ -13,6 +13,7 @@
 #include <unistd.h> 
 #include <netdb.h>
 
+#include <errno.h>
 #include <sys/time.h>
 #include <sys/select.h>
 #include <sys/ioctl.h>
@@ -23,6 +24,22 @@
 #include <linux/net_tstamp.h>
 #include <linux/errqueue.h>
 
+#ifndef SO_TIMESTAMPING
+# define SO_TIMESTAMPING         37
+# define SCM_TIMESTAMPING        SO_TIMESTAMPING
+#endif
+
+#ifndef SO_TIMESTAMPNS
+# define SO_TIMESTAMPNS 35
+#endif
+
+#ifndef SIOCGSTAMPNS
+# define SIOCGSTAMPNS 0x8907
+#endif
+
+#ifndef SIOCSHWTSTAMP
+# define SIOCSHWTSTAMP 0x89b0
+#endif
 
 #define numFrames 120001
 
@@ -198,20 +215,20 @@ static short recvpacket(int sock, int recvmsg_flags,
 	res = recvmsg(sock, &msg, recvmsg_flags);
 	if (res < 0) {
 		printf("\n Error receiving the packet");
+		printf("\nres is : %d\n\n", res);
 	} else {
 		//printpacket(&msg, res, data, sock, recvmsg_flags,siocgstamp, siocgstampns);
-		printf("\nPrint packet here");
 		//short p = (data[1] << 8) + data[2];
 		printf("\nData is :%hu\n", data);
 		//printf("\nData is :%s",*entry.iov_base);
-		if (recvmsg_flags==0)
-			printpacket(&msg, res, "heello",sock, recvmsg_flags,siocgstamp, siocgstampns);
+		printpacket(&msg, res, "heello",sock, recvmsg_flags,siocgstamp, siocgstampns);
 		return data;
 	}
 }
 
 void getSamples(short *samples, int argc, char *argv[]) {
-  char *service = "7000"; // First arg:  local port/service
+  	char *service = "7000"; // First arg:  local port/service
+
 	int so_timestamping_flags = 0;
 	int so_timestamp = 0;
 	int so_timestampns = 0;
@@ -230,7 +247,7 @@ void getSamples(short *samples, int argc, char *argv[]) {
 
 		
 	interface = argv[2];
-   for (i = 3; i < argc; i++) {
+   	for (i = 3; i < argc; i++) {
 		if (!strcasecmp(argv[i], "SO_TIMESTAMP"))
 			so_timestamp = 1;
 		else if (!strcasecmp(argv[i], "SO_TIMESTAMPNS"))
@@ -255,39 +272,69 @@ void getSamples(short *samples, int argc, char *argv[]) {
 			so_timestamping_flags |= SOF_TIMESTAMPING_RAW_HARDWARE;
 		else
 			usage(argv[i]);
-   }
+   	}
 
-	  // Construct the server address structure
-  struct addrinfo addrCriteria;                   // Criteria for address
-  memset(&addrCriteria, 0, sizeof(addrCriteria)); // Zero out structure
-  addrCriteria.ai_family = AF_UNSPEC;             // Any address family
-  addrCriteria.ai_flags = AI_PASSIVE;             // Accept on any address/port
-  addrCriteria.ai_socktype = SOCK_DGRAM;          // Only datagram socket
-  addrCriteria.ai_protocol = IPPROTO_UDP;         // Only UDP socket
+	// Construct the server address structure
+	struct addrinfo addrCriteria;                   // Criteria for address
+	memset(&addrCriteria, 0, sizeof(addrCriteria)); // Zero out structure
+	addrCriteria.ai_family = PF_INET;             // Any address family
+	addrCriteria.ai_flags = AI_PASSIVE;             // Accept on any address/port
+	addrCriteria.ai_socktype = SOCK_DGRAM;          // Only datagram socket
+	addrCriteria.ai_protocol = IPPROTO_UDP;         // Only UDP socket
 
-  struct addrinfo *servAddr; // List of server addresses
-  int rtnVal = getaddrinfo(NULL, service, &addrCriteria, &servAddr);
-  if (rtnVal != 0){
-    printf("getaddrinfo() failed");
-    exit(1);
-   }
+	struct addrinfo *servAddr; // List of server addresses
+	int rtnVal = getaddrinfo(NULL, service, &addrCriteria, &servAddr);
+	if (rtnVal != 0){
+		printf("getaddrinfo() failed");
+		exit(1);
+	}
 
-  // Create socket for incoming connections
-  int sock = socket(servAddr->ai_family, servAddr->ai_socktype,
-      servAddr->ai_protocol);
-  if (sock < 0){
-	printf("Socket() failed");
-	exit(1);
-  }
+	// Create socket for incoming connections
+	int sock = socket(servAddr->ai_family, servAddr->ai_socktype,servAddr->ai_protocol);
+	if (sock < 0){
+		printf("Socket() failed");
+		exit(1);
+	}
 
-  // Bind to the local address
-  if (bind(sock, servAddr->ai_addr, servAddr->ai_addrlen) < 0){
+	memset(&device, 0, sizeof(device));
+	strncpy(device.ifr_name, interface, sizeof(device.ifr_name));
+	if (ioctl(sock, SIOCGIFADDR, &device) < 0)
+		bail("getting interface IP address");
+
+	memset(&hwtstamp, 0, sizeof(hwtstamp));
+	strncpy(hwtstamp.ifr_name, interface, sizeof(hwtstamp.ifr_name));
+	hwtstamp.ifr_data = (void *)&hwconfig;
+	memset(&hwconfig, 0, sizeof(hwconfig));
+	hwconfig.tx_type =
+		(so_timestamping_flags & SOF_TIMESTAMPING_TX_HARDWARE) ?
+		HWTSTAMP_TX_ON : HWTSTAMP_TX_OFF;
+	printf("\nhwconfig.tx_type:%d",hwconfig.tx_type);
+	hwconfig.rx_filter =
+		(so_timestamping_flags & SOF_TIMESTAMPING_RX_HARDWARE) ?
+		HWTSTAMP_FILTER_PTP_V1_L4_SYNC : HWTSTAMP_FILTER_NONE;
+	hwconfig_requested = hwconfig;
+	if (ioctl(sock, SIOCSHWTSTAMP, &hwtstamp) < 0) {
+		if ((errno == EINVAL || errno == ENOTSUP) &&
+		    hwconfig_requested.tx_type == HWTSTAMP_TX_OFF &&
+		    hwconfig_requested.rx_filter == HWTSTAMP_FILTER_NONE)
+			printf("SIOCSHWTSTAMP: disabling hardware time stamping not possible\n");
+		else
+			bail("SIOCSHWTSTAMP");
+	}
+	printf("SIOCSHWTSTAMP: tx_type %d requested, got %d; rx_filter %d requested, got %d\n",
+	       hwconfig_requested.tx_type, hwconfig.tx_type,
+	       hwconfig_requested.rx_filter, hwconfig.rx_filter);
+
+
+	// Bind to the local address
+	if (bind(sock, servAddr->ai_addr, servAddr->ai_addrlen) < 0){
 	printf("bind() failed");
-  	exit(1);
-  }
+	exit(1);
+	}
 
-  // Free address list allocated by getaddrinfo()
-  freeaddrinfo(servAddr);
+
+	// Free address list allocated by getaddrinfo()
+	freeaddrinfo(servAddr);
 
 	/* set socket options for time stamping */
 	if (so_timestamp &&
@@ -333,26 +380,43 @@ void getSamples(short *samples, int argc, char *argv[]) {
 	}
 
 
-  for (i = 0; i < numFrames; i++) {
-	struct sockaddr_storage clntAddr; // Client address
-    	// Set Length of client address structure (in-out parameter)
-    	socklen_t clntAddrLen = sizeof(clntAddr);
+	int res;
+	fd_set readfs, errorfs;
 
-	/*
-    	// Block until receive message from a client
-    	int numBytesRcvd = recvfrom(sock, &samples[i], sizeof(short), 0,
-        	(struct sockaddr *) &clntAddr, &clntAddrLen);
+	for (i = 0; i < numFrames; i++) {
+		struct sockaddr_storage clntAddr; // Client address
+		// Set Length of client address structure (in-out parameter)
+		socklen_t clntAddrLen = sizeof(clntAddr);
 
-	if (numBytesRcvd < 0){
-		printf("\n Received: %d \n",numBytesRcvd);
-		exit(1);
-        }
-	printf("\nNumber of bytes received is %d", numBytesRcvd);
-	*/
-	samples[i] = recvpacket(sock, 0, 1, 1);//siocgstamp,siocgstampns are 1 here
+		/*
+		// Block until receive message from a client
+		int numBytesRcvd = recvfrom(sock, &samples[i], sizeof(short), 0,
+			(struct sockaddr *) &clntAddr, &clntAddrLen);
 
-	printf("\n%d %hu", i+1,samples[i]);
-    }
+		if (numBytesRcvd < 0){
+			printf("\n Received: %d \n",numBytesRcvd);
+			exit(1);
+		}
+		printf("\nNumber of bytes received is %d", numBytesRcvd);
+		*/
+		FD_ZERO(&readfs);
+		FD_ZERO(&errorfs);
+		FD_SET(sock, &readfs);
+		FD_SET(sock, &errorfs);
+		struct timeval delta;		
+		res = select(sock + 1, &readfs, 0, &errorfs, &delta);
+		if(res>0){
+			if (FD_ISSET(sock, &readfs))
+				printf("ready for reading\n");
+			if (FD_ISSET(sock, &errorfs))
+				printf("has error\n");
+
+			samples[i] = recvpacket(sock, 0, 0, 0);//siocgstamp,siocgstampns are 1 here
+			recvpacket(sock, MSG_ERRQUEUE, 0, 0);//siocgstamp,siocgstampns are 1 here
+			printf("Got data");
+			printf("\n%d %hu", i+1,samples[i]);
+		}
+	}
 
 	printf("\n Exiting getSamples"); 
 	return;
