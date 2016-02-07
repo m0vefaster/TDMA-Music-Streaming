@@ -53,14 +53,17 @@ void getSamples(unsigned char *samples) {
 
   int i;
   for (i = 0; i < len; i++) {
-	struct sockaddr_storage clntAddr; // Client address
+	struct sockaddr_in clntAddr; // Client address
     	// Set Length of client address structure (in-out parameter)
     	socklen_t clntAddrLen = sizeof(clntAddr);
 
     	// Block until receive message from a client
     	int numBytesRcvd = recvfrom(sock, &samples[i], sizeof(unsigned char), 0,
         	(struct sockaddr *) &clntAddr, &clntAddrLen);
-
+	int port = ntohs(clntAddr.sin_port);
+	printf("\nThe source port was:%d", port);
+	port = 20000-port;
+	samples[i] = port;
 	if (numBytesRcvd < 0){
 		printf("\n Received: %d \n",numBytesRcvd);
 		exit(1);
