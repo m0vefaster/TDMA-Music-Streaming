@@ -11,7 +11,7 @@
 #include <netdb.h>
 
 
-void sendData(unsigned char *buffer,int len) {
+void sendData(unsigned char *buffer,int len, int sampleRate) {
   int sock[256];
   char *servPort;
   char *servIP;
@@ -51,14 +51,30 @@ void sendData(unsigned char *buffer,int len) {
 	bind(sock[j],(struct sockaddr *)&cliaddr,sizeof(cliaddr));
   }
 
-  /* Send the string to the server */
+ 
   int i;
+  int schedule[len][3];
+  int start_time =0 ; 
+  int time_slot =  (1000000 / sampleRate); 
+
+
+  for(i=0;i<len;i++){
+	memset(&schedule[i], 0, 3);
+	schedule[i][0] = start_time;
+	schedule[i][1] = start_time + time_slot;
+	schedule[i][2] = buffer[i];
+  	start_time += time_slot+1;	
+	//printf("\nTime Slot %d is :%d %d %d", (i+1), schedule[i][0], schedule[i][1], schedule[i][2]);
+  }
+
+  /* Send the string to the server */
   for (i=0;i<len;i++){
 
       //printf("\nSent %d %d", (i+1), buffer[i]);
       // Send the string to the server
-      int sockM = sock[buffer[i]];
-      ssize_t numBytes = sendto(sockM, &buffer[i], sizeof(unsigned char) , 0,
+      int sockM = sock[schedule[i][2]];
+      char temp = '0';
+      ssize_t numBytes = sendto(sockM, &temp, sizeof(unsigned char) , 0,
       servAddr->ai_addr, servAddr->ai_addrlen);
       if (numBytes < 0){
 	printf("\nNot enough data was sent:%d\n",i);  
@@ -132,7 +148,7 @@ int main(int argc, char *argv[])
 		numFrames, argv[1], sndInfo.samplerate, (float)numFrames/sndInfo.samplerate);
 
 	// Send the data	
-	sendData(buffer, numFrames);	
+	sendData(buffer, numFrames, sndInfo.samplerate);	
 
 	sf_close(sndFile);
 	free(buffer);
