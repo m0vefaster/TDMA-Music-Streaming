@@ -12,7 +12,7 @@
 
 
 void sendData(unsigned char *buffer,int len) {
-  int sock;
+  int sock[256];
   char *servPort;
   char *servIP;
   char *fileName;
@@ -38,10 +38,17 @@ void sendData(unsigned char *buffer,int len) {
   }
 
   // Create a datagram/UDP socket
-  sock = socket(servAddr->ai_family, servAddr->ai_socktype,
-      servAddr->ai_protocol); // Socket descriptor for client
-  if (sock < 0){
-	printf("socket() failed");
+  int j;
+  for(j=0;j<255;j++){
+  	sock[j] = socket(servAddr->ai_family, servAddr->ai_socktype,servAddr->ai_protocol); // Socket descriptor for client
+  	if (sock[j] < 0){
+		printf("socket() failed");
+  	 }
+	struct sockaddr_in cliaddr;
+	cliaddr.sin_family = AF_INET;
+	cliaddr.sin_addr.s_addr= htonl(INADDR_ANY);
+	cliaddr.sin_port=htons(20000+j); //source port for outgoing packets
+	bind(sock[j],(struct sockaddr *)&cliaddr,sizeof(cliaddr));
   }
 
   /* Send the string to the server */
@@ -50,7 +57,8 @@ void sendData(unsigned char *buffer,int len) {
 
       //printf("\nSent %d %d", (i+1), buffer[i]);
       // Send the string to the server
-      ssize_t numBytes = sendto(sock, &buffer[i], sizeof(unsigned char) , 0,
+      int sockM = sock[buffer[i]];
+      ssize_t numBytes = sendto(sockM, &buffer[i], sizeof(unsigned char) , 0,
       servAddr->ai_addr, servAddr->ai_addrlen);
       if (numBytes < 0){
 	printf("\nNot enough data was sent:%d\n",i);  
@@ -61,7 +69,10 @@ void sendData(unsigned char *buffer,int len) {
   }
 
   printf("\nNunber of samples sent is:%d", len);
-  close(sock);
+  for(j=0;j<255;j++){
+  	close(sock[j]);
+  }
+
   exit(0);
 }
 
@@ -106,8 +117,6 @@ int main(int argc, char *argv[])
 		printf("%d %u\n", (i+1), (unsigned int)buffer[i]);
 	}*/
 
-	printf("\nNumber of frames is :%d", sndInfo.frames);
-	printf("\nNumber of frames is :%d", numFrames);
 	printf("\nFormat is :%d", sndInfo.format);
 
 	// Check correct number of samples loaded
