@@ -128,10 +128,10 @@ int main(int argc, char *argv[])
 	long numFrames = sf_read_raw(sndFile, buffer, sndInfo.frames);
 
 	// Print Samples/Frames
-  	/*int i;	
+  	int i;	
 	for (i=0;i<numFrames;i++){
 		printf("%d %u\n", (i+1), (unsigned int)buffer[i]);
-	}*/
+	}
 
 	printf("\nFormat is :%d", sndInfo.format);
 
