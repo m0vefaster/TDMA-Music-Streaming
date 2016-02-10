@@ -20,7 +20,7 @@
 
 #define numFrames 598528 
 void process_packet(u_char *, const struct pcap_pkthdr *, const u_char *);
-int getUDPPort(const u_char * , int);
+int getSourceIP(const u_char * , int);
 void writeToFile();
  
 struct sockaddr_in source,dest;
@@ -67,8 +67,8 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
      
     //Get the IP Header part of this packet , excluding the ethernet header
     struct iphdr *iph = (struct iphdr*)(buffer + sizeof(struct ethhdr));
-    if (iph->protocol){
-	int port = getUDPPort(buffer,size);
+    if (iph->protocol==17){
+	int port = getSourceIP(buffer,size);
 	//printf("\nThe UDP Port is:%d", port);
 	samples[total] = port-20000;
 	total++;
@@ -82,17 +82,16 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
  
 int getUDPPort(const u_char *Buffer , int Size)
 {
-     
     unsigned short iphdrlen;
+         
+    struct iphdr *iph = (struct iphdr *)(Buffer  + sizeof(struct ethhdr) );
+    iphdrlen =iph->ihl*4;
      
-    struct iphdr *iph = (struct iphdr *)(Buffer +  sizeof(struct ethhdr));
-    iphdrlen = iph->ihl*4;
-     
-    struct udphdr *udph = (struct udphdr*)(Buffer + iphdrlen  + sizeof(struct ethhdr));
-     
-    int header_size =  sizeof(struct ethhdr) + iphdrlen + sizeof udph;
-     
-    return ntohs(udph->source);
+    memset(&source, 0, sizeof(source));
+    source.sin_addr.s_addr = iph->saddr;
+
+    char *sourceIP = inet_ntoa(dest.sin_addr)     
+   
 }
  
 void writeToFile(){
