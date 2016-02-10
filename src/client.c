@@ -16,7 +16,7 @@ void sendData(short *buffer,int len) {
   char *fileName;
   int bytesRcvd, totalBytesRcvd;
 
-  servIP = "127.0.0.1" ;
+  servIP = "192.168.1.33" ;
   servPort = atoi("7000");
 
   /* Create a reliable, stream socket using TCP */
@@ -40,8 +40,8 @@ void sendData(short *buffer,int len) {
   printf("\nConnected\n");
 
   /* Send the string to the server */
-
-  for (int i=0;i<len;i++){
+  int i;
+  for (i=0;i<len;i++){
   	if (send(sock, &buffer[i],sizeof(short),0) != sizeof(short)){
 		printf("\nNot enough data was sent\n");
 		exit(1);
