@@ -61,7 +61,6 @@ void getSamples(unsigned char *samples) {
     	int numBytesRcvd = recvfrom(sock, &samples[i], sizeof(unsigned char), 0,
         	(struct sockaddr *) &clntAddr, &clntAddrLen);
 	int port = ntohs(clntAddr.sin_port);
-	printf("\nThe source port was:%d", port);
 	port = 20000-port;
 	samples[i] = port;
 	if (numBytesRcvd < 0){
