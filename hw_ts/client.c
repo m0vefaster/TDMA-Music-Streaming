@@ -241,7 +241,7 @@ void sendData(short *buffer,int numFrames,int argc, char *argv[]) {
 int main(int argc, char *argv[])
 {
 	printf("Wav Read Test\n");
-	if (argc <=2) {
+	if (argc <=1) {
 		fprintf(stderr, "Expecting wav file as argument\n");
 		return 1;
 	}
