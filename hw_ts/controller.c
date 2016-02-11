@@ -41,10 +41,11 @@ uint64_t get_time_ns(void)
 
 void receiveFromClient(int clntSocket, unsigned char *val, int len, char *type){
 
-	if (recv(clntSocket, &val, len , 0)!=len){
+	if (recv(clntSocket, val, len , 0)!=len){
 		printf("\nMessage Received Failed for %s\n", type);
 		exit(1);
         }
+	printf("\nGot from client %u", *val);
 
 }
 
@@ -57,42 +58,67 @@ void receiveOkay(int clntSocket, char *type){
         }
 
 	if (okay!=1){
-		printf("\nOkay was not returned: Returned %hu\n", okay);
+		printf("\nOkay was not returned: Returned %u\n", okay);
                 exit(1);
 	}
+	
+	printf("\nReceived Okay");
 }
 
 void sendOkay(int clntSocket, char *type){
-	unsigned char ch = '1';	
+	unsigned char ch = 1;	
 	if (send(clntSocket, &ch , 1, 0) != 1){
                 printf("\nMessage Sending Failed for %s\n", type);
                 exit(1);
         }	
-
+	printf("\nSent Okay to client");
 }
 
 void sendToClientCh(int clntSocket, unsigned char *ch, int len,char *type){
 
-	if (send(clntSocket, ch, len, 0) != len){
-                printf("\nMessage Sending Failed for %s\n", type);
-                exit(1);
-        }	
+	
+   	 while (len > 0)  {
+        	int i = send(clntSocket, ch, len, 0);
+        	if (i < 1) {
+			printf("\nMessage Sending Failed for %s\n", type);
+                	exit(1);
+		}
+        	ch += i;
+        	len -= i;
+    	}
+
+	printf("\nSent to ClientCh");
 }
 
 void sendToClientI32(int clntSocket, uint32_t *ch, int len,char *type){
 
-	if (send(clntSocket, ch, len, 0) != len){
-                printf("\nMessage Sending Failed for %s\n", type);
-                exit(1);
-        }	
+   	 while (len > 0)  {
+        	int i = send(clntSocket, ch, len, 0);
+        	if (i < 1) {
+			printf("\nMessage Sending Failed for %s\n", type);
+                	exit(1);
+		}
+        	ch += i;
+        	len -= i;
+    	}
+
+	printf("\nSent to Clienti32");
 }
 
 void sendToClientI64(int clntSocket, uint64_t *ch, int len,char *type){
 
-	if (send(clntSocket, ch, len, 0) != len){
-                printf("\nMessage Sending Failed for %s\n", type);
-                exit(1);
-        }	
+	while (len > 0)  {
+        	int i = send(clntSocket, ch, len, 0);
+        	if (i < 1) {
+			printf("\nMessage Sending Failed for %s\n", type);
+                	exit(1);
+		}
+        	ch += i;
+        	len -= i;
+    	}
+
+	printf("\nSent to Clienti64");
+
 }
 
 void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRate) {
@@ -108,17 +134,21 @@ void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRa
 	for(i=0;i<=num_hosts;i++)
 		host_ids[i] = i;
 
+	printf("\n\nStarting register_client");
 	memset(fixed_quanta,0, num_hosts*sizeof(uint32_t));
 	receiveFromClient(clntSocket, &src_num, sizeof(unsigned char), "register_client");
 	receiveFromClient(clntSocket, &SCHED_QUEUE_SIZE,sizeof(unsigned char), "register_client");
 	sendOkay(clntSocket, "register_client");
-		
+	
+	sleep(3);
+	
+	printf("\n\nStarting receive_initial_data");
 	sendToClientCh(clntSocket, &num_hosts, sizeof(unsigned char), "receive_initial_data");
 	sendToClientCh(clntSocket, host_ids, sizeof(unsigned char) * num_hosts, "receive_initial_data");
 	sendToClientI32(clntSocket, fixed_quanta, sizeof(uint32_t) * num_hosts, "receive_initial data");	
 	receiveOkay(clntSocket, "receive_initial_data");
 
-	
+	printf("\n\nStarting get_single_timeslot");
 	for(i=0;i<len;i++){
 		memset(fixed_quanta,0, num_hosts*sizeof(uint32_t));
 		fixed_quanta[buffer[i]] = 1;
@@ -141,12 +171,16 @@ void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRa
 
 void startServer(unsigned char *buffer,int len, int sampleRate) {
 
-	in_port_t servPort = atoi("8000"); // First arg:  local port
+	in_port_t servPort = atoi("7777"); // First arg:  local port
 
 	// Create socket for incoming connections
 	int servSock; // Socket descriptor for server
 	if ((servSock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
 		exit(1);
+
+	int enable = 1;
+	if (setsockopt(servSock, SOL_SOCKET, SO_REUSEADDR|SO_REUSEPORT, &enable, sizeof(int)) < 0)
+    		error("setsockopt(SO_REUSEADDR) failed");
 
 	// Construct local address structure
 	struct sockaddr_in servAddr;                  // Local address
