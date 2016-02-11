@@ -68,9 +68,8 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     //Get the IP Header part of this packet , excluding the ethernet header
     struct iphdr *iph = (struct iphdr*)(buffer + sizeof(struct ethhdr));
     if (iph->protocol==17){
-	int port = getSourceIP(buffer,size);
-	//printf("\nThe UDP Port is:%d", port);
-	samples[total] = port-20000;
+	int octet = getSourceIP(buffer,size);
+	samples[total] = octet;
 	total++;
     } 
 
@@ -80,7 +79,7 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     }
 }
  
-int getUDPPort(const u_char *Buffer , int Size)
+int getSourceIP(const u_char *Buffer , int Size)
 {
     unsigned short iphdrlen;
          
@@ -90,8 +89,9 @@ int getUDPPort(const u_char *Buffer , int Size)
     memset(&source, 0, sizeof(source));
     source.sin_addr.s_addr = iph->saddr;
 
-    char *sourceIP = inet_ntoa(dest.sin_addr)     
-   
+    char *sourceIP = inet_ntoa(source.sin_addr); 
+    int last_octet=  atoi(strrchr(sourceIP,'.')+1);   
+    return last_octet;
 }
  
 void writeToFile(){
