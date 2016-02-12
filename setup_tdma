@@ -1,0 +1,21 @@
+  cd /mnt/dcswitch/jrmcguin_tmp/tdma
+
+./setup_tdma_test.py -n <- do this first on the sender
+
+insmod /mnt/dcswitch/jrmcguin_tmp/tdma/sch_tdma.ko foreign_pkt_limit=500000 local_pkt_limit=500000 ctrl_addr=192.168.1.100
+
+tc qdisc add dev p2p1 root tdma
+
+gcc -g -O2 -o udp_multi_blaster_all udp_multi_blaster_all.c
+
+./udp_multi_blaster_all p2p1 192.168.5.104 7777
+
+
+
+After Being Done:
+
+  tc qdisc del dev p2p1 root
+
+rmmod sch_tdma
+
+./setup_tdma_test.py -d <- when done (unload tdma first)
