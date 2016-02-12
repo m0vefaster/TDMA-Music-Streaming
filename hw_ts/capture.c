@@ -18,7 +18,7 @@
 
 #include <sndfile.h>
 
-#define numFrames 598528 
+#define numFrames 53499 
 void process_packet(u_char *, const struct pcap_pkthdr *, const u_char *);
 int getSourceIP(const u_char * , int);
 void writeToFile();
@@ -27,6 +27,7 @@ struct sockaddr_in source,dest;
 int total=0,i,j; 
 unsigned char samples[numFrames];
 char *fileName;
+unsigned char prev=0;
  
 int main(int argc, char *argv[])
 {
@@ -69,8 +70,15 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     struct iphdr *iph = (struct iphdr*)(buffer + sizeof(struct ethhdr));
     if (iph->protocol==17){
 	int octet = getSourceIP(buffer,size);
-	samples[total] = octet;
-	total++;
+	/*Hack for consequtive samples*/
+	if(octet!=prev){
+		printf("\n\n");
+		samples[total] = octet;
+		total++;
+		prev = octet;
+		if (total%100==0)
+			printf("\nReceived %d", total);
+	}
     } 
 
     if (total==numFrames){
@@ -86,11 +94,12 @@ int getSourceIP(const u_char *Buffer , int Size)
     struct iphdr *iph = (struct iphdr *)(Buffer  + sizeof(struct ethhdr) );
     iphdrlen =iph->ihl*4;
      
-    memset(&source, 0, sizeof(source));
-    source.sin_addr.s_addr = iph->saddr;
+    source.sin_addr.s_addr = iph->daddr;
 
     char *sourceIP = inet_ntoa(source.sin_addr); 
     int last_octet=  atoi(strrchr(sourceIP,'.')+1);   
+    
+    printf("\n%d", last_octet);
     return last_octet;
 }
  
@@ -100,7 +109,7 @@ void writeToFile(){
 	// Write to a new file
 	SF_INFO sfinfo_w ;
     	sfinfo_w.channels = 1;
-    	sfinfo_w.samplerate = 44100;
+    	sfinfo_w.samplerate = 8000;
     	sfinfo_w.format = SF_FORMAT_WAV | SF_FORMAT_PCM_U8;
 	
 	SNDFILE *sndFile_w = sf_open(fileName, SFM_WRITE, &sfinfo_w);
