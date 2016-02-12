@@ -12,10 +12,11 @@
 #include <fcntl.h>
 #include <unistd.h> 
 #include <time.h>
+#include <inttypes.h>
 
-// recv and send for len 
-// exit and close socket
-// Source port instead of source ip
+// recv and send for len--->Done 
+// exit and close socket---->Done
+// Source port instead of source ip--->Done
 // sys times for start time and absolute--->Done 
 // libpcap to get in timeslots
 
@@ -105,28 +106,27 @@ void sendToClientI32(int clntSocket, uint32_t *ch, int len,char *type){
 	printf("\nSent to Clienti32");
 }
 
-void sendToClientI64(int clntSocket, uint64_t *ch, int len,char *type){
+void sendToClientI64(int clntSocket, uint64_t num, int len,char *type){
 
-	while (len > 0)  {
-        	int i = send(clntSocket, ch, len, 0);
-        	if (i < 1) {
-			printf("\nMessage Sending Failed for %s\n", type);
-                	exit(1);
-		}
-        	ch += i;
-        	len -= i;
-    	}
-
+	size_t i;
+	unsigned char ch;
+	unsigned char arr[len];
+	for (i = 0; i < len; i++  ) {	
+   		ch = (num >> ((i & 7) << 3)) & 0xFF;
+   		arr[len - i - 1] = ch;
+	 }
+	sendToClientCh(clntSocket, arr, len, type);
 	printf("\nSent to Clienti64");
-
+	
 }
 
 void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRate) {
 	int i;
 	unsigned char src_num, SCHED_QUEUE_SIZE;
 	
-	unsigned char num_hosts=255, host_ids[num_hosts];
-	uint32_t fixed_quanta[num_hosts*sizeof(uint32_t)];
+	uint32_t num_hosts_plus = 256;
+	unsigned char num_hosts=0, host_ids[num_hosts_plus];
+	uint32_t fixed_quanta[num_hosts_plus];
 	
 	uint64_t start_time , end_time, now, offset = 2000000000;
 	uint64_t time_slot =  (1000000000 / sampleRate); 
@@ -135,33 +135,41 @@ void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRa
 		host_ids[i] = i;
 
 	printf("\n\nStarting register_client");
-	memset(fixed_quanta,0, num_hosts*sizeof(uint32_t));
+	memset(fixed_quanta,0, num_hosts_plus*sizeof(uint32_t));
 	receiveFromClient(clntSocket, &src_num, sizeof(unsigned char), "register_client");
 	receiveFromClient(clntSocket, &SCHED_QUEUE_SIZE,sizeof(unsigned char), "register_client");
 	sendOkay(clntSocket, "register_client");
 	
-	sleep(3);
-	
 	printf("\n\nStarting receive_initial_data");
 	sendToClientCh(clntSocket, &num_hosts, sizeof(unsigned char), "receive_initial_data");
-	sendToClientCh(clntSocket, host_ids, sizeof(unsigned char) * num_hosts, "receive_initial_data");
-	sendToClientI32(clntSocket, fixed_quanta, sizeof(uint32_t) * num_hosts, "receive_initial data");	
+	sendToClientCh(clntSocket, host_ids, sizeof(unsigned char) * num_hosts_plus, "receive_initial_data");
+	sendToClientI32(clntSocket, fixed_quanta, sizeof(uint32_t) * num_hosts_plus, "receive_initial data");	
 	receiveOkay(clntSocket, "receive_initial_data");
 
 	printf("\n\nStarting get_single_timeslot");
 	for(i=0;i<len;i++){
-		memset(fixed_quanta,0, num_hosts*sizeof(uint32_t));
-		fixed_quanta[buffer[i]] = 1;
+		memset(fixed_quanta,0, num_hosts_plus*sizeof(uint32_t));
+		unsigned char pos = buffer[i];
+		/*Hack---Don't want two consecutive values same*/
+		if (i>0 && buffer[i-1]==buffer[i]){
+			if (i%2==0)
+				pos++;
+			else
+				pos--;
+		}
+		fixed_quanta[pos] = 1;
 		now = get_time_ns();
 		start_time  = now + offset;
 		end_time = now + time_slot + offset;
 
-	 	sendToClientI64(clntSocket, &start_time, sizeof(uint64_t), "get_single_timeslot");
-	 	sendToClientI64(clntSocket, &end_time, sizeof(uint64_t), "get_single_timeslot");
-		sendToClientI32(clntSocket, fixed_quanta, sizeof(uint32_t) * num_hosts, "receive_initial data");	
+	 	sendToClientI64(clntSocket, start_time, sizeof(uint64_t), "get_single_timeslot");
+	 	sendToClientI64(clntSocket, end_time, sizeof(uint64_t), "get_single_timeslot");
+		sendToClientI32(clntSocket, fixed_quanta, sizeof(uint32_t) * num_hosts_plus, "get_single_timeslot");	
 
-  		start_time += time_slot+1;	
-
+		printf("\n%d Start time, End time and buffer[i] are:", i);
+		printf("%" PRIu64 "\n", start_time);
+		printf("%" PRIu64 "\n", end_time);
+		printf("%u\n", buffer[i]);
 		/*Ignoring tx_update*/
 		int max_len=100;
 		char temp[max_len];
@@ -284,6 +292,8 @@ int main(int argc, char *argv[])
 	sf_close(sndFile);
 	free(buffer);
 	printf("\n");
-
+	
+	printf("\n\nDone sending. Waiting ....");
+	while(1){};
 	return 0;
 }
