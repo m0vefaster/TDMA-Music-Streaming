@@ -19,15 +19,17 @@
 #include <sndfile.h>
 
 #define numFrames 53499 
+
 void process_packet(u_char *, const struct pcap_pkthdr *, const u_char *);
 int getSourceIP(const u_char * , int);
 void writeToFile();
  
 struct sockaddr_in source,dest;
-int total=0,i,j; 
+int total=0,i,j,super=0; 
 unsigned char samples[numFrames];
 char *fileName;
 unsigned char prev=0;
+struct pcap_stat stat;
  
 int main(int argc, char *argv[])
 {
@@ -53,6 +55,48 @@ int main(int argc, char *argv[])
     }
     printf("Done\n");
 
+
+    /*
+    pcap_set_snaplen(handle, 65535);
+    pcap_set_promisc(handle, 0);
+    pcap_set_timeout(handle, 1000);
+    pcap_set_buffer_size(handle, 16<<26); // 16MB
+    pcap_activate(handle);
+
+    char filter_exp[] = "udp";
+    struct bpf_program fp;	
+    bpf_u_int32 mask;
+    bpf_u_int32 net;
+
+    if (pcap_lookupnet(devname, &net, &mask, errbuf) == -1) {
+		fprintf(stderr, "Couldn't get netmask for device %s: %s\n",
+		    devname, errbuf);
+		net = 0;
+		mask = 0;
+    }
+
+    printf("Device: %s\n", devname);
+    printf("Filter expression: %s\n", filter_exp);
+
+    if (pcap_compile(handle, &fp, filter_exp, 0, net) == -1) {
+		fprintf(stderr, "Couldn't parse filter %s: %s\n",
+		    filter_exp, pcap_geterr(handle));
+		exit(EXIT_FAILURE);
+    }
+
+     if (pcap_setfilter(handle, &fp) == -1) {
+		fprintf(stderr, "Couldn't install filter %s: %s\n",
+		    filter_exp, pcap_geterr(handle));
+		exit(EXIT_FAILURE);
+    }
+
+    if(pcap_stats(handle, &stat) < 0){
+	    fprintf(stderr,"\nError setting the mode.\n");
+	    pcap_close(handle);
+	    return;
+    }
+    */
+
     //Clearing the values
     memset(samples, 0, numFrames);     
 
@@ -69,15 +113,20 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     //Get the IP Header part of this packet , excluding the ethernet header
     struct iphdr *iph = (struct iphdr*)(buffer + sizeof(struct ethhdr));
     if (iph->protocol==17){
+	super++;
 	int octet = getSourceIP(buffer,size);
 	/*Hack for consequtive samples*/
 	if(octet!=prev){
-		printf("\n\n");
 		samples[total] = octet;
 		total++;
 		prev = octet;
-		if (total%100==0)
+		if (total%100==0){
+			printf("\nReceivedL %d", stat.ps_recv);
 			printf("\nReceived %d", total);
+			printf("\nDrop is %d", stat.ps_drop); 
+			printf("\nIDrop is%d", stat.ps_ifdrop);
+			printf("\nSuper is%d", super);
+		}
 	}
     } 
 
@@ -99,7 +148,7 @@ int getSourceIP(const u_char *Buffer , int Size)
     char *sourceIP = inet_ntoa(source.sin_addr); 
     int last_octet=  atoi(strrchr(sourceIP,'.')+1);   
     
-    printf("\n%d", last_octet);
+    //printf("\n%d", last_octet);
     return last_octet;
 }
  
