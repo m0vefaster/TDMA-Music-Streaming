@@ -28,6 +28,7 @@
 #define unlikely(x)     (x)
 #endif
 
+FILE *logfp;
 
 static inline __attribute__((always_inline))
 uint64_t get_time_ns(void)
@@ -46,7 +47,7 @@ void receiveFromClient(int clntSocket, unsigned char *val, int len, char *type){
 		printf("\nMessage Received Failed for %s\n", type);
 		exit(1);
         }
-	printf("\nGot from client %u", *val);
+	//printf("\nGot from client %u", *val);
 
 }
 
@@ -63,7 +64,7 @@ void receiveOkay(int clntSocket, char *type){
                 exit(1);
 	}
 	
-	printf("\nReceived Okay");
+	//printf("\nReceived Okay");
 }
 
 void sendOkay(int clntSocket, char *type){
@@ -72,7 +73,7 @@ void sendOkay(int clntSocket, char *type){
                 printf("\nMessage Sending Failed for %s\n", type);
                 exit(1);
         }	
-	printf("\nSent Okay to client");
+	//printf("\nSent Okay to client");
 }
 
 void sendToClientCh(int clntSocket, unsigned char *ch, int len,char *type){
@@ -88,7 +89,7 @@ void sendToClientCh(int clntSocket, unsigned char *ch, int len,char *type){
         	len -= i;
     	}
 
-	printf("\nSent to ClientCh");
+	//printf("\nSent to ClientCh");
 }
 
 void sendToClientI32(int clntSocket, uint32_t *ch, int len,char *type){
@@ -103,7 +104,7 @@ void sendToClientI32(int clntSocket, uint32_t *ch, int len,char *type){
         	len -= i;
     	}
 
-	printf("\nSent to Clienti32");
+	//printf("\nSent to Clienti32");
 }
 
 void sendToClientI64(int clntSocket, uint64_t num, int len,char *type){
@@ -116,23 +117,30 @@ void sendToClientI64(int clntSocket, uint64_t num, int len,char *type){
    		arr[len - i - 1] = ch;
 	 }
 	sendToClientCh(clntSocket, arr, len, type);
-	printf("\nSent to Clienti64");
+	//printf("\nSent to Clienti64");
 	
 }
 
 void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRate) {
 	int i;
+	unsigned char j;
 	unsigned char src_num, SCHED_QUEUE_SIZE;
 	
 	uint32_t num_hosts_plus = 256;
 	unsigned char num_hosts=0, host_ids[num_hosts_plus];
 	uint32_t fixed_quanta[num_hosts_plus];
 	
-	uint64_t start_time , end_time, now, offset = 2000000000;
+	uint64_t start_time , end_time, now, offset = 10000000000;
 	uint64_t time_slot =  (1000000000 / sampleRate); 
 
-	for(i=0;i<=num_hosts;i++)
-		host_ids[i] = i;
+	memset(fixed_quanta,0, num_hosts_plus*sizeof(uint32_t));
+	j=0;
+	for(i=0;i<num_hosts_plus;i++){
+		host_ids[j] = j;
+		printf("\n host_ids[j]= %hu",  host_ids[j]);
+		j++;
+	}
+
 
 	printf("\n\nStarting register_client");
 	memset(fixed_quanta,0, num_hosts_plus*sizeof(uint32_t));
@@ -147,6 +155,9 @@ void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRa
 	receiveOkay(clntSocket, "receive_initial_data");
 
 	printf("\n\nStarting get_single_timeslot");
+	now = get_time_ns();
+	uint64_t sleepTime = time_slot; 
+
 	for(i=0;i<len;i++){
 		memset(fixed_quanta,0, num_hosts_plus*sizeof(uint32_t));
 		unsigned char pos = buffer[i];
@@ -157,24 +168,31 @@ void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRa
 			else
 				pos--;
 		}
+
 		fixed_quanta[pos] = 1;
-		now = get_time_ns();
 		start_time  = now + offset;
 		end_time = now + time_slot + offset;
+		
+		now = now + time_slot + sleepTime; 
 
 	 	sendToClientI64(clntSocket, start_time, sizeof(uint64_t), "get_single_timeslot");
 	 	sendToClientI64(clntSocket, end_time, sizeof(uint64_t), "get_single_timeslot");
 		sendToClientI32(clntSocket, fixed_quanta, sizeof(uint32_t) * num_hosts_plus, "get_single_timeslot");	
 
-		printf("\n%d Start time, End time and buffer[i] are:", i);
-		printf("%" PRIu64 "\n", start_time);
-		printf("%" PRIu64 "\n", end_time);
-		printf("%u\n", buffer[i]);
+		//printf("\n%d Start time, End time and buffer[i] are:", i);
+		//printf("%" PRIu64 "\n", start_time);
+		//printf("%" PRIu64 "\n", end_time);
+		fprintf(logfp,"%d %u\n", i, pos);
+		fflush(logfp);
 		/*Ignoring tx_update*/
 		int max_len=100;
 		char temp[max_len];
 		recv(clntSocket, &temp, max_len , MSG_DONTWAIT);
+		//usleep(1500);
+		//while(1){}
 	}		
+	printf("\nFinished sending");
+	printf("\nFinished sending");
 }
 
 void startServer(unsigned char *buffer,int len, int sampleRate) {
@@ -240,6 +258,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	
+	logfp = fopen("controller.log","w");
 	// Open sound file
 	SF_INFO sndInfo;
 	SNDFILE *sndFile = sf_open(argv[1], SFM_READ, &sndInfo);
@@ -294,6 +313,7 @@ int main(int argc, char *argv[])
 	printf("\n");
 	
 	printf("\n\nDone sending. Waiting ....");
-	while(1){};
+	while(1){}
+
 	return 0;
 }
