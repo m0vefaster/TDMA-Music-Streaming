@@ -19,7 +19,7 @@
 #include <sndfile.h>
 
 #define numFrames 53499 
-
+FILE *logfp;
 void process_packet(u_char *, const struct pcap_pkthdr *, const u_char *);
 int getSourceIP(const u_char * , int);
 void writeToFile();
@@ -43,7 +43,7 @@ int main(int argc, char *argv[])
 
     devname = argv[1];
     fileName = argv[2];
- 
+    logfp = fopen("capture.log","w");
     //Open the device for sniffing
     printf("Opening device %s for sniffing ... " , devname);
     handle = pcap_open_live(devname , 65536 , 1 , 0 , errbuf);
@@ -116,17 +116,22 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
 	super++;
 	int octet = getSourceIP(buffer,size);
 	/*Hack for consequtive samples*/
+
+	if (total%3000==0){
+			//printf("\nReceivedL %d", stat.ps_recv);
+			//printf("\nReceived %d", total);
+			//printf("\nDrop is %d", stat.ps_drop); 
+			//printf("\nIDrop is%d", stat.ps_ifdrop);
+			//fprintf(logfp,"\nSuper is%d", super);
+    			fprintf(logfp,"\n%d\n", total);
+			fflush(logfp);
+	}
+
 	if(octet!=prev){
 		samples[total] = octet;
 		total++;
 		prev = octet;
-		if (total%100==0){
-			printf("\nReceivedL %d", stat.ps_recv);
-			printf("\nReceived %d", total);
-			printf("\nDrop is %d", stat.ps_drop); 
-			printf("\nIDrop is%d", stat.ps_ifdrop);
-			printf("\nSuper is%d", super);
-		}
+    		//fprintf(logfp,"\n%d", octet);
 	}
     } 
 
@@ -148,7 +153,7 @@ int getSourceIP(const u_char *Buffer , int Size)
     char *sourceIP = inet_ntoa(source.sin_addr); 
     int last_octet=  atoi(strrchr(sourceIP,'.')+1);   
     
-    //printf("\n%d", last_octet);
+    //fprintf(logfp,"\n%d", last_octet);
     return last_octet;
 }
  
