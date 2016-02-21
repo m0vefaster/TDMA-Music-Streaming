@@ -19,6 +19,7 @@
 #include <sndfile.h>
 
 #define numFrames 53499 
+
 FILE *logfp;
 void process_packet(u_char *, const struct pcap_pkthdr *, const u_char *);
 int getSourceIP(const u_char * , int);
@@ -30,6 +31,7 @@ unsigned char samples[numFrames];
 char *fileName;
 unsigned char prev=0;
 struct pcap_stat stat;
+int written = 0;
  
 int main(int argc, char *argv[])
 {
@@ -117,7 +119,7 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
 	int octet = getSourceIP(buffer,size);
 	/*Hack for consequtive samples*/
 
-	if (total%3000==0){
+	if (super%10000==0){
 			//printf("\nReceivedL %d", stat.ps_recv);
 			//printf("\nReceived %d", total);
 			//printf("\nDrop is %d", stat.ps_drop); 
@@ -135,9 +137,11 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
 	}
     } 
 
-    if (total==numFrames){
+    if (total==50000 && written==0){//numFrames){
+	printf("\nTotal is:%d", total);
 	writeToFile();
-	exit(1);
+	written=1;
+	//exit(1);
     }
 }
  
@@ -167,10 +171,12 @@ void writeToFile(){
     	sfinfo_w.format = SF_FORMAT_WAV | SF_FORMAT_PCM_U8;
 	
 	SNDFILE *sndFile_w = sf_open(fileName, SFM_WRITE, &sfinfo_w);
-	sf_count_t count_w = sf_write_raw(sndFile_w, samples, numFrames) ;
+	sf_count_t count_w = sf_write_raw(sndFile_w, samples, total);//numFrames) ;
     	sf_write_sync(sndFile_w);
     	sf_close(sndFile_w);
+	/*
 	int i;
 	for (i=0;i<numFrames;i++)
 		printf("\nFrame %d is : %d", (i+1), samples[i]);
+	*/
 }
