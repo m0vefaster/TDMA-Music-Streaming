@@ -13,6 +13,7 @@
 #include <unistd.h> 
 #include <time.h>
 #include <inttypes.h>
+#include <pthread.h>
 
 // recv and send for len--->Done 
 // exit and close socket---->Done
@@ -31,6 +32,19 @@
 FILE *logfp;
 
 static inline __attribute__((always_inline))
+
+void *recv_tx_update(void *clntSocket_ptr)
+{
+	int *clntSocket = (int *)clntSocket_ptr;
+
+	while(1){	
+		//Ignoring tx_update
+		int max_len=1000;
+		char temp[max_len];
+		recv(*clntSocket, &temp, max_len , MSG_DONTWAIT);
+	}
+}
+
 
 uint64_t max(uint64_t a, uint64_t b){
 	if(a>b)
@@ -165,12 +179,27 @@ void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRa
 	printf("\n\nStarting get_single_timeslot");
 	//sleep(3);//Sleep before starting udp blaster
 	now = get_time_ns();
-	uint64_t sleepTime = 2 *time_slot; 
+	uint64_t sleepTime = 2*time_slot; 
+
+	pthread_t recv_thread;
+	if(pthread_create(&recv_thread, NULL, recv_tx_update, &clntSocket)) {
+		fprintf(stderr, "Error creating thread\n");
+		exit(1);
+	}
+
+	printf("pthread created");
+	/*
+	if(pthread_join(recv_thread, NULL)) {
+		fprintf(stderr, "Error joining thread\n");
+		exit(1);
+	}*/
+
 
 	for(i=0;i<len;i++){
-		uint64_t now_now = get_time_ns();
-		now = max(now_now, now);
-		printf("\nTrying to Send sample %d",i);
+		//uint64_t now_now = get_time_ns();
+		//now = max(now_now, now);
+		if (i%10000==0)
+			printf("\nSending sample %d",i);
 		memset(fixed_quanta,0, num_hosts_plus*sizeof(uint32_t));
 		unsigned char pos = buffer[i];
 		/*Hack---Don't want two consecutive values same*/
@@ -181,6 +210,7 @@ void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRa
 				pos--;
 		}
 
+		buffer[i] = pos;
 		fixed_quanta[pos] = 1;
 		start_time  = now + offset;
 		end_time = now + offset + time_slot ;
@@ -196,16 +226,18 @@ void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRa
 	 	sendToClientI64(clntSocket, end_time, sizeof(uint64_t), "get_single_timeslot");
 		sendToClientI32(clntSocket, fixed_quanta, sizeof(uint32_t) * num_hosts_plus, "get_single_timeslot");	
 
-		fprintf(logfp,"\n%d Start time, End time and buffer[i] are:", i);
-		fprintf(logfp,"%" PRIu64 "\n", start_time);
-		fprintf(logfp, "%" PRIu64 "\n", end_time);
-		fprintf(logfp,"%d %u\n\n", i, pos);
+		//fprintf(logfp,"\n%d Start time, End time and buffer[i] are:", i);
+		//fprintf(logfp,"%" PRIu64 "\n", start_time);
+		//fprintf(logfp, "%" PRIu64 "\n", end_time);
+		fprintf(logfp,"%d %u\n",i, pos);
 		fflush(logfp);
-		/*Ignoring tx_update*/
+		/*	
+		//Ignoring tx_update
 		int max_len=1000;
 		char temp[max_len];
 		recv(clntSocket, &temp, max_len , MSG_DONTWAIT);
 		recv(clntSocket, &temp, max_len , MSG_DONTWAIT);
+		*/
 		//usleep(1500);
 		//while(1){}
 	}		
