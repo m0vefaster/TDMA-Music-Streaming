@@ -18,7 +18,7 @@
 
 #include <sndfile.h>
 
-#define numFrames 53499 
+#define numFrames 200000 
 
 FILE *logfp;
 void process_packet(u_char *, const struct pcap_pkthdr *, const u_char *);
@@ -27,24 +27,39 @@ void writeToFile();
  
 struct sockaddr_in source,dest;
 int total=0,i,j,super=0; 
-unsigned char samples[numFrames];
 char *fileName;
 unsigned char prev=0;
 struct pcap_stat stat;
 int written = 0;
- 
+int expected; 
+int frequency ;
+unsigned char *samples;
 int main(int argc, char *argv[])
 {
     pcap_t *handle; //Handle of the device that shall be sniffed
     char errbuf[100] , *devname , devs[100][100];
     int count = 1 , n;
-    if  (argc!=3){
-	printf("Usage: ./capture <Interface_Name> <FileName>\n");
+    char *ref_file;
+    if  (argc!=4){
+	printf("Usage: ./capture <Interface_Name> <Output FileName> <Reference File>\n");
 	exit(1);
     } 
 
     devname = argv[1];
     fileName = argv[2];
+    ref_file = argv[3];
+
+    SF_INFO sndInfo;
+    SNDFILE *sndFile = sf_open(ref_file, SFM_READ, &sndInfo);
+    if (sndFile == NULL) {
+	fprintf(stderr, "Error reading source file '%s': %s\n", argv[1], sf_strerror(sndFile));
+        return 1;
+    }
+
+    expected = sndInfo.frames;
+    frequency = sndInfo.samplerate;
+    samples = (unsigned char *) malloc(expected * sizeof(unsigned char));
+
     logfp = fopen("capture.log","w");
     //Open the device for sniffing
     printf("Opening device %s for sniffing ... " , devname);
@@ -100,7 +115,7 @@ int main(int argc, char *argv[])
     */
 
     //Clearing the values
-    memset(samples, 0, numFrames);     
+    memset(samples, 0, expected);     
 
     //Put the device in sniff loop
     pcap_loop(handle , -1 , process_packet , NULL);
@@ -119,6 +134,7 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
 	int octet = getSourceIP(buffer,size);
 	/*Hack for consequtive samples*/
 
+	/*
 	if (super%10000==0){
 			//printf("\nReceivedL %d", stat.ps_recv);
 			//printf("\nReceived %d", total);
@@ -128,7 +144,7 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     			fprintf(logfp,"\n%d\n", total);
 			fflush(logfp);
 	}
-
+	*/
 	if(octet!=prev){
 		samples[total] = octet;
 		total++;
@@ -137,10 +153,13 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
 	}
     } 
 
-    if (total==50000 && written==0){//numFrames){
+    if (total==expected && written==0){//numFrames){
 	printf("\nTotal is:%d", total);
 	writeToFile();
 	written=1;
+	int j;
+	for(j=0;j<expected;j++)
+		fprintf(logfp,"%d %u\n", j,samples[j]);
 	//exit(1);
     }
 }
@@ -167,7 +186,7 @@ void writeToFile(){
 	// Write to a new file
 	SF_INFO sfinfo_w ;
     	sfinfo_w.channels = 1;
-    	sfinfo_w.samplerate = 8000;
+    	sfinfo_w.samplerate = frequency;
     	sfinfo_w.format = SF_FORMAT_WAV | SF_FORMAT_PCM_U8;
 	
 	SNDFILE *sndFile_w = sf_open(fileName, SFM_WRITE, &sfinfo_w);
