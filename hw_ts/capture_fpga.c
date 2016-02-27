@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
     }
 
     expected = sndInfo.frames;
-    expected = expected * 0.98;
+    expected = expected * 0.98 * 86;
     frequency = sndInfo.samplerate;
     samples = (unsigned char *) malloc(expected * sizeof(unsigned char));
     timeStamps = (uint64_t *) malloc(expected * sizeof(uint64_t));
@@ -113,13 +113,20 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     			fprintf(logfp,"\n%d\n", total);
 			fflush(logfp);
 	}
-	*/
+	
 	if(octet!=prev){
 		samples[total] = octet;
 		total++;
 		prev = octet;
+		timeStamps[total] = timestamp;
     		fprintf(logfp,"\n%d", octet);
 	}
+	*/	
+		
+	samples[total] = octet;
+	total++;
+	timeStamps[total] = timestamp;
+    	
     } 
 
     if (total==expected && written==0){//numFrames){
@@ -215,7 +222,34 @@ void quicksort(uint64_t * data, unsigned char *samples, int N){
 void writeToFile(){
 
         printf("\n Got the Samples. Writing to File\n");	
- 	quicksort(timeStamps, samples, expected);	
+ 	//quicksort(timeStamps, samples, expected);	
+        printf("\nNumber of flips is %d", flips);	
+   
+	fprintf(logfp,"\n\nSamples....");
+	int totalSamples =0;
+	int i;
+	uint64_t prev = 0;
+	unsigned char *validSamples;
+	int expectedValid = expected/86;
+	validSamples = (unsigned char *) malloc(expected * sizeof(unsigned char));
+	for(i=0;i<expected;i++){
+
+		if(totalSamples> expectedValid)
+			break;
+
+		uint64_t diff = timeStamps[i]-prev;
+		if (diff > 100000){
+			fprintf(logfp,"\n\n New sample, Time difference was");
+			fprintf(logfp,"%" PRIu64 "\n", diff);
+			validSamples[totalSamples++]= samples[i];
+		} 
+
+		prev = timeStamps[i];
+		fprintf(logfp,"%u ",samples[i]);
+	} 
+
+	printf("\nFound all valid Samples...");
+
 	// Write to a new file
 	SF_INFO sfinfo_w ;
     	sfinfo_w.channels = 1;
@@ -223,12 +257,12 @@ void writeToFile(){
     	sfinfo_w.format = SF_FORMAT_WAV | SF_FORMAT_PCM_U8;
 	
 	SNDFILE *sndFile_w = sf_open(fileName, SFM_WRITE, &sfinfo_w);
-	sf_count_t count_w = sf_write_raw(sndFile_w, samples, total);//numFrames) ;
+	sf_count_t count_w = sf_write_raw(sndFile_w, validSamples, expectedValid);//numFrames) ;
     	sf_write_sync(sndFile_w);
     	sf_close(sndFile_w);
-	/*
-	int i;
-	for (i=0;i<numFrames;i++)
-		printf("\nFrame %d is : %d", (i+1), samples[i]);
-	*/
+
+	printf("\nDone.....");
+
+ 		
+	exit(1);
 }
