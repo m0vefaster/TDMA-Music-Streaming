@@ -179,7 +179,7 @@ void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRa
 	printf("\n\nStarting get_single_timeslot");
 	//sleep(3);//Sleep before starting udp blaster
 	now = get_time_ns();
-	uint64_t sleepTime = 2*time_slot; 
+	uint64_t sleepTime = time_slot; 
 
 	pthread_t recv_thread;
 	if(pthread_create(&recv_thread, NULL, recv_tx_update, &clntSocket)) {
@@ -203,14 +203,16 @@ void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRa
 		memset(fixed_quanta,0, num_hosts_plus*sizeof(uint32_t));
 		unsigned char pos = buffer[i];
 		/*Hack---Don't want two consecutive values same*/
+		/*
 		if (i>0 && buffer[i-1]==buffer[i]){
 			if (i%2==0)
 				pos++;
 			else
 				pos--;
 		}
-
+		
 		buffer[i] = pos;
+		*/
 		fixed_quanta[pos] = 1;
 		start_time  = now + offset;
 		end_time = now + offset + time_slot ;
