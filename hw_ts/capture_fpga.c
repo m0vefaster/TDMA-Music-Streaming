@@ -40,6 +40,8 @@ int frequency ;
 unsigned char *samples;
 uint64_t *timeStamps;
 int flips=0;
+int multFactor;
+int timeSlot;
 
 int main(int argc, char *argv[])
 {
@@ -63,12 +65,16 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    multFactor = (8000*80)/sndInfo.samplerate;
+    timeSlot = (125000/sndInfo.samplerate) * 8000;
     expected = sndInfo.frames;
-    expected = expected * 0.98 * 86;
+    expected = expected * 0.98 * multFactor;
     frequency = sndInfo.samplerate;
     samples = (unsigned char *) malloc(expected * sizeof(unsigned char));
     timeStamps = (uint64_t *) malloc(expected * sizeof(uint64_t));
 
+     printf("\nTimeslot is :%d\n", timeSlot);
+      printf("\nMult Factor is %d\n",multFactor);
     logfp = fopen("capture.log","w");
     //Open the device for sniffing
     printf("Opening device %s for sniffing ... " , devname);
@@ -230,7 +236,7 @@ void writeToFile(){
 	int i;
 	uint64_t prev = 0;
 	unsigned char *validSamples;
-	int expectedValid = expected/86;
+	int expectedValid = expected/multFactor;
 	validSamples = (unsigned char *) malloc(expected * sizeof(unsigned char));
 	for(i=0;i<expected;i++){
 
@@ -238,7 +244,7 @@ void writeToFile(){
 			break;
 
 		uint64_t diff = timeStamps[i]-prev;
-		if (diff > 100000){
+		if (diff > timeSlot){
 			fprintf(logfp,"\n\n New sample, Time difference was");
 			fprintf(logfp,"%" PRIu64 "\n", diff);
 			validSamples[totalSamples++]= samples[i];
