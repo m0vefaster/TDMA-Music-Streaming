@@ -1,4 +1,9 @@
-  cd /mnt/dcswitch/jrmcguin_tmp/tdma
+cd /mnt/dcswitch/jrmcguin_tmp/tools
+./tcp_offload_disable.sh p2p1
+
+./irqs_disable.py
+
+cd /mnt/dcswitch/jrmcguin_tmp/tdma
 
 ./setup_tdma_test.py -n <- do this first on the sender
 
@@ -10,12 +15,57 @@ gcc -g -O2 -o udp_multi_blaster_all udp_multi_blaster_all.c
 
 ./udp_multi_blaster_all p2p1 192.168.5.104 7777
 
+tc qdisc add dev p2p1 root tdma; ./udp_multi_blaster_all p2p1 192.168.5.104 7777
 
+
+======================
 
 After Being Done:
 
   tc qdisc del dev p2p1 root
 
-rmmod sch_tdma
+  rmmod sch_tdma
 
-./setup_tdma_test.py -d <- when done (unload tdma first)
+  ./setup_tdma_test.py -d <- when done (unload tdma first)
+==========================
+
+PTP
+
+If you want ptp alongside this, run :
+service ntp start
+phc2sys -a -rr -m -q
+ptp4l -A -2 -H -f /mnt/dcswitch/jrmcguin_tmp/ptp4l.conf -i p2p2 -m -q
+
+On slaves:
+  service ntp stop
+  phc2sys -a -rr -m -q
+ptp4l -A -2 -H -s -f /mnt/dcswitch/jrmcguin_tmp/ptp4l.conf -i p2p2 -m -q
+
+===========================
+
+Compiling
+
+gcc -I $HOME/local/include -L $HOME/local/lib  controller.c -o controller -lsndfile -g
+gcc -L /usr/local/lib/ capture.c -o capture -lsndfile -lpcap
+
+./controller ../files/pcm0808m.wav
+
+=========================
+n2disk10g
+
+
+umount /mnt/ramdisk
+mount -t tmpfs -o size=8192m tmpfs /mnt/ramdisk
+n2disk10g -o /mnt/ramdisk/pcaps/ -g -i p2p1 -u root -b 4096 -r -p 1024 -w 0 -c 4
+
+=========================
+
+Compiling and Running the controller
+
+gcc -I $HOME/local/include -L $HOME/local/lib  controller.c -o controller -lsndfile -pthread -g
+./controller ../files/pcm_22050_8bitMono.wav
+
+
+Compiling and Running the receiver
+gcc -L /usr/local/lib/ capture_fpga.c -o capture -lsndfile -lpcap
+./capture p2p1 temp.wav ../files/pcm0808m.wav
