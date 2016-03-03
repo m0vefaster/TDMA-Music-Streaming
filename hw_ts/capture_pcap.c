@@ -160,14 +160,13 @@ int main(int argc, char *argv[]){
 	char errbuf[PCAP_ERRBUF_SIZE];
 	struct pcap_pkthdr header;
 
-	if ( argc != 4 ) {
-		printf("Usage: ./capture <erspan_pcap_file> <Audio Output FileName> <Audio Reference File>\n");
+	if ( argc < 4 ) {
+		printf("Usage: ./capture  <Audio Output FileName> <Audio Reference File> <erspan_pcap_file>\n");
 		exit(1);
 	}
 
-	char *pcap_file = argv[1];
-	char *output_file = argv[2];
-	char *ref_file = argv[3];
+	char *output_file = argv[1];
+	char *ref_file = argv[2];
 
 	SF_INFO sndInfo;
     	SNDFILE *sndFile = sf_open(ref_file, SFM_READ, &sndInfo);
@@ -188,20 +187,22 @@ int main(int argc, char *argv[]){
 	memset (timeStamps,0, expected);	
 
 	logfp = fopen("capture.log","w");
+	
+	int i;
+	for(i=3;i<argc;i++){ 
+		pcap = pcap_open_offline(argv[i], errbuf);
 
-	pcap = pcap_open_offline(pcap_file, errbuf);
+		if (pcap == NULL){
+			fprintf(stderr, "error reading pcap file: %s\n", errbuf);
+			exit(1);
+		}
 
-	if (pcap == NULL){
-		fprintf(stderr, "error reading pcap file: %s\n", errbuf);
-		exit(1);
-	}
-
-	/* Now just loop through extracting packets as long as we have
-	 * some to read.
-	 */
-	while ((packet = pcap_next(pcap, &header)) != NULL)
-		getERSPANTimestamps(packet, header.caplen);	
- 	
+		/* Now just loop through extracting packets as long as we have
+		 * some to read.
+		 */
+		while ((packet = pcap_next(pcap, &header)) != NULL)
+			getERSPANTimestamps(packet, header.caplen);	
+	}		
 	writeToFile(output_file);
 		
 	return 0;
