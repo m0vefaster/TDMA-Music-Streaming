@@ -22,8 +22,12 @@
 
 
 unsigned char *samples;
-uint64_t *timeStamps;
-int total;
+uint64_t *timeStamps_Data;
+int total_data=0;
+
+uint64_t *timeStamps_PTP;
+uint64_t *timeStamps_PTP_ERSPAN;
+int total_ptp=0;
 
 int multFactor;
 int expected;
@@ -32,8 +36,7 @@ int timeSlot;
 
 FILE *logfp;
 
-int getSourceIP(const u_char *Buffer , int Size)
-	{
+int getSourceIP(const u_char *Buffer , int Size) {
 	unsigned short iphdrlen;
 	//Moving ahead to encapsulated packet which is 62 bytes ahead 
 	struct iphdr *iph = (struct iphdr *)(Buffer + 62  + sizeof(struct ethhdr) );
@@ -47,9 +50,9 @@ int getSourceIP(const u_char *Buffer , int Size)
 
 	//fprintf(logfp,"\n%d", last_octet);
 	return last_octet;
-	}
+}
 
-uint64_t getTimestamp(const u_char *Buffer , int Size){
+uint64_t getERSPANTimestamp(const u_char *Buffer , int Size){
 	char val[4];
 	memcpy(val, Buffer + 46,4);
 	uint32_t x;
@@ -69,7 +72,26 @@ uint64_t getTimestamp(const u_char *Buffer , int Size){
 }
 
 
-void getERSPANTimestamps(const unsigned char *buffer, unsigned int size) {
+uint64_t getPTPTimestamp(const u_char *Buffer , int Size){
+	uint64_t timeSeconds;	
+	uint64_t timeNanoSeconds;
+	uint64_t timePTP;
+
+	char val[4];
+	uint32_t x;
+
+	memcpy(val, Buffer + 112, 4);
+	memcpy(&x,val,4);
+	timeSeconds = ntohl(x);
+
+	memcpy(val, Buffer + 116, 4);
+	memcpy(&x,val,4);
+	timeNanoSeconds = ntohl(x);
+
+	timePTP = timeSeconds * pow(10,9) + timeNanoSeconds; 	
+} 
+
+void getDataTimestamps(const unsigned char *buffer, unsigned int size) {
 
 	//Get the IP Header part of this packet , excluding the ethernet header
 	struct iphdr *iph = (struct iphdr*)(buffer + sizeof(struct ethhdr));
@@ -77,11 +99,38 @@ void getERSPANTimestamps(const unsigned char *buffer, unsigned int size) {
 	if (iph->protocol==47){
 
 		int octet = getSourceIP(buffer,size);
-		uint64_t timestamp = getTimestamp(buffer,size);
+		uint64_t timestamp = getERSPANTimestamp(buffer,size);
 		
-		samples[total] = octet;
-		timeStamps[total] = timestamp;
-		total++;
+		samples[total_data] = octet;
+		timeStamps_Data[total_data] = timestamp;
+		total_data++;
+	} 
+
+}
+
+
+void getPTPTimestamps(const unsigned char *buffer, unsigned int size) {
+
+	//Expected Type of PTP is 0x88f7 which is 35063 in decimal
+	char type[2];
+	uint16_t x;
+	memcpy(type, buffer + 74, 2);
+        memcpy(&x, type,2);
+	
+	uint16_t ptp_type = ntohs(x);
+	//fprintf(logfp,"%" PRIu16 "\n", ptp_type); 
+	if(ptp_type==35063 && buffer[76]==8){ 
+		//Match PTP Follow Type
+		
+		uint64_t ptp = getERSPANTimestamp(buffer,size);
+		uint64_t erspan = getPTPTimestamp(buffer,size);
+		
+		timeStamps_PTP[total_ptp] = ptp;
+		timeStamps_PTP_ERSPAN[total_ptp] = erspan;
+		total_ptp++;
+		
+		fprintf(logfp,"\n%" PRIu64 , ptp);
+		fprintf(logfp,"\n%" PRIu64 "\n", erspan);
 	} 
 
 }
@@ -91,13 +140,13 @@ void writeToFile(char *output_file){
         printf("\n Got the Samples. Writing to File\n");	
 	fprintf(logfp,"\n\nSamples....");
 	
-	int totalSamples =0;
+	int total_dataSamples =0;
 	int i;
 	uint64_t prev = 0;
 	unsigned char *validSamples;
 	int expectedValid = expected/multFactor;
 	validSamples = (unsigned char *) malloc(expected * sizeof(unsigned char));
-	uint64_t start = timeStamps[1];
+	uint64_t start = timeStamps_Data[1];
 	int nightTimePackets = 0;
 	int slot = 0;
 
@@ -107,13 +156,13 @@ void writeToFile(char *output_file){
 
 	for(i=2;i<expected;i++){
 		
-		validSamples[totalSamples++]= samples[i];
+		validSamples[total_dataSamples++]= samples[i];
 
 		fprintf(logfp,"\nSlot %d has value %u\n",slot, samples[i]);
-		fprintf(logfp,"%" PRIu64 "\n", timeStamps[i]);
+		fprintf(logfp,"%" PRIu64 "\n", timeStamps_Data[i]);
 		fprintf(logfp,"%" PRIu64 "\n", (start+timeSlot));
 		fprintf(logfp,"\nDay Time Packets:");
-		while(timeStamps[i] < (start +timeSlot)){
+		while(timeStamps_Data[i] < (start +timeSlot)){
 			fprintf(logfp,"%u ", samples[i]);
 			i++;	
 		}
@@ -122,13 +171,13 @@ void writeToFile(char *output_file){
 
 		//nightTime Packets
 		fprintf(logfp,"\nNight Time Packets:");
-		while(timeStamps[i] < (start + timeSlot)){
+		while(timeStamps_Data[i] < (start + timeSlot)){
 			fprintf(logfp,"%u ", samples[i]);
 			nightTimePackets++;
 			i++;
 		}
 
-		if(totalSamples> expectedValid)
+		if(total_dataSamples> expectedValid)
 			break;
 
 		fprintf(logfp,"\n\n");
@@ -161,12 +210,13 @@ int main(int argc, char *argv[]){
 	struct pcap_pkthdr header;
 
 	if ( argc < 4 ) {
-		printf("Usage: ./capture  <Audio Output FileName> <Audio Reference File> <erspan_pcap_file>\n");
+		printf("Usage: ./capture  <Audio Output FileName> <Audio Reference File> <ptp_pcap_file>  <erspan_pcap_file>\n");
 		exit(1);
 	}
 
 	char *output_file = argv[1];
 	char *ref_file = argv[2];
+	char *ptp_file = argv[3];
 
 	SF_INFO sndInfo;
     	SNDFILE *sndFile = sf_open(ref_file, SFM_READ, &sndInfo);
@@ -182,18 +232,42 @@ int main(int argc, char *argv[]){
 	frequency = sndInfo.samplerate;
 
     	samples = (unsigned char *) malloc(expected * sizeof(unsigned char));
-    	timeStamps = (uint64_t *) malloc(expected * sizeof(uint64_t));
+    	timeStamps_Data = (uint64_t *) malloc(expected * sizeof(uint64_t));
 	memset (samples, 0, expected);
-	memset (timeStamps,0, expected);	
+	memset (timeStamps_Data,0, expected);	
+
+
+    	timeStamps_PTP = (uint64_t *) malloc(expected * sizeof(uint64_t));
+	timeStamps_PTP_ERSPAN = (uint64_t *) malloc(expected * sizeof(uint64_t));
+	memset (timeStamps_PTP,0, expected);	
+	memset (timeStamps_PTP_ERSPAN,0, expected);	
 
 	logfp = fopen("capture.log","w");
-	
+
+
+	/*Read PTP Pakcets*/
 	int i;
-	for(i=3;i<argc;i++){ 
+	pcap = pcap_open_offline(ptp_file, errbuf);
+
+	if (pcap == NULL){
+		fprintf(stderr, "error reading ptp pcap file: %s\n", errbuf);
+		exit(1);
+	}
+
+	/* Now just loop through extracting packets as long as we have
+	 * some to read.
+	 */
+	while ((packet = pcap_next(pcap, &header)) != NULL)
+		getPTPTimestamps(packet, header.caplen);	
+
+	exit(1);
+
+	/*Read Data Packets*/
+	for(i=4;i<argc;i++){ 
 		pcap = pcap_open_offline(argv[i], errbuf);
 
 		if (pcap == NULL){
-			fprintf(stderr, "error reading pcap file: %s\n", errbuf);
+			fprintf(stderr, "error reading data pcap file: %s\n", errbuf);
 			exit(1);
 		}
 
@@ -201,7 +275,7 @@ int main(int argc, char *argv[]){
 		 * some to read.
 		 */
 		while ((packet = pcap_next(pcap, &header)) != NULL)
-			getERSPANTimestamps(packet, header.caplen);	
+			getDataTimestamps(packet, header.caplen);	
 	}		
 	writeToFile(output_file);
 		
