@@ -135,6 +135,40 @@ void getPTPTimestamps(const unsigned char *buffer, unsigned int size) {
 
 }
 
+void adjustToAbsoluteTimeStamps(){
+	
+	int i,j=0,k;
+
+	/*Check for zero*/
+
+	uint64_t ptp_start_window = timeStamps_PTP[0];
+	uint64_t ptp_erspan_start_window = timeStamps_PTP_ERSPAN[0];
+
+	for(i=1;i<total_ptp;i++){
+		
+		uint64_t ptp_end_window = timeStamps_PTP[1];
+		uint64_t ptp_erspan_end_window = timeStamps_PTP_ERSPAN[1];
+		
+		int packets_window = 0;
+		int start_pos = j;		
+		while(j<total_data && timeStamps_Data[j]>= ptp_erspan_start_window && timeStamps_Data[j]<= ptp_erspan_end_window){
+			j++;
+			packets_window++;
+		}
+		
+		uint32_t drift = (ptp_erspan_end_window - ptp_erspan_start_window) - (ptp_end_window-ptp_start_window);
+		drift/= packets_window;
+
+		for(k=start_pos; k<j;j++){
+			timeStamps_Data[k] = ptp_erspan_start_window + drift*(k-start_pos+1);		
+		}
+ 	
+		if(j==total_data)
+			break;
+	}		
+			
+}
+
 void writeToFile(char *output_file){
 	
         printf("\n Got the Samples. Writing to File\n");	
@@ -277,6 +311,9 @@ int main(int argc, char *argv[]){
 		while ((packet = pcap_next(pcap, &header)) != NULL)
 			getDataTimestamps(packet, header.caplen);	
 	}		
+
+	adjustToAbsoluteTimeStamps();
+
 	writeToFile(output_file);
 		
 	return 0;
