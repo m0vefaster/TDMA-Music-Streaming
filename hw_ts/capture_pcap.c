@@ -1,8 +1,3 @@
-/*
-    Packet sniffer using libpcap library
-*/
-//sudo apt-get install libpcap-dev
-//Source: http://www.binarytides.com/packet-sniffer-code-c-libpcap-linux-sockets/
 #include<pcap.h>
 #include<stdio.h>
 #include<stdlib.h> // for exit()
@@ -122,15 +117,15 @@ void getPTPTimestamps(const unsigned char *buffer, unsigned int size) {
 	if(ptp_type==35063 && buffer[76]==8){ 
 		//Match PTP Follow Type
 		
-		uint64_t ptp = getERSPANTimestamp(buffer,size);
-		uint64_t erspan = getPTPTimestamp(buffer,size);
+		uint64_t erspan = getERSPANTimestamp(buffer,size);
+		uint64_t ptp = getPTPTimestamp(buffer,size);
 		
 		timeStamps_PTP[total_ptp] = ptp;
 		timeStamps_PTP_ERSPAN[total_ptp] = erspan;
 		total_ptp++;
 		
-		fprintf(logfp,"\n%" PRIu64 , ptp);
-		fprintf(logfp,"\n%" PRIu64 "\n", erspan);
+		//fprintf(logfp,"\n%" PRIu64 , ptp);
+		//fprintf(logfp,"\n%" PRIu64 "\n", erspan);
 	} 
 
 }
@@ -146,25 +141,60 @@ void adjustToAbsoluteTimeStamps(){
 
 	for(i=1;i<total_ptp;i++){
 		
-		uint64_t ptp_end_window = timeStamps_PTP[1];
-		uint64_t ptp_erspan_end_window = timeStamps_PTP_ERSPAN[1];
+		uint64_t ptp_end_window = timeStamps_PTP[i];
+		uint64_t ptp_erspan_end_window = timeStamps_PTP_ERSPAN[i];
+				
+		fprintf(logfp, "\n\nStart of window is %" PRIu64 "\n", ptp_erspan_start_window); 
+		fprintf(logfp, "\n\nStart of window PTP is %" PRIu64 "\n", ptp_start_window); 
+		fprintf(logfp, "\nFirst timestamp data is %" PRIu64 "\n", timeStamps_Data[j]);
 		
+
 		int packets_window = 0;
 		int start_pos = j;		
 		while(j<total_data && timeStamps_Data[j]>= ptp_erspan_start_window && timeStamps_Data[j]<= ptp_erspan_end_window){
 			j++;
 			packets_window++;
 		}
-		
-		uint32_t drift = (ptp_erspan_end_window - ptp_erspan_start_window) - (ptp_end_window-ptp_start_window);
-		drift/= packets_window;
 
-		for(k=start_pos; k<j;j++){
-			timeStamps_Data[k] = ptp_erspan_start_window + drift*(k-start_pos+1);		
+		fprintf(logfp, "\nNumber of packets is window is %d", packets_window);	
+
+		if (packets_window!=0) {
+		
+			float drift = (ptp_end_window-ptp_start_window) - (ptp_erspan_end_window - ptp_erspan_start_window) ;
+			fprintf(logfp, "\nPTP ERSPAN Start Window is %" PRIu64 "\n", ptp_erspan_start_window);
+			fprintf(logfp, "\nPTP ERSPAN End Window is %" PRIu64 "\n", ptp_erspan_end_window);
+			fprintf(logfp, "\nPTP Start Window is %" PRIu64 "\n", ptp_start_window);
+			fprintf(logfp, "\nPTP End Window is %" PRIu64 "\n", ptp_end_window);
+
+			//fprintf(logfp, "\nDrift is %" PRId64 "\n", drift);	
+			
+			drift/= packets_window;
+			for(k=start_pos; k<j;k++){
+
+				uint64_t temp1 =  (ptp_erspan_end_window - ptp_erspan_start_window);
+				uint64_t temp2 = timeStamps_Data[k] -ptp_erspan_start_window;
+				float temp1_f = temp1;
+				float temp2_f = temp2;
+				float temp3_f = (double)drift;
+				//fprintf(logfp, "\n\n\ntemp1_f is %f", temp1_f);
+				//fprintf(logfp, "\ntemp2_f is %f", temp2_f);
+				//fprintf(logfp, "\ntemp3_f is %f", temp3_f);
+				float temp = temp2_f/temp1_f;
+				//fprintf(logfp, "\ntemp is %f", temp);
+				float temp4_f = temp * temp3_f;
+				fprintf(logfp, "\ntemp4_f is %f", temp4_f);
+				uint64_t offset = ptp_start_window - ptp_erspan_start_window + temp4_f;
+				timeStamps_Data[k]  += offset;	
+				
+			}
+		
 		}
- 	
+		
 		if(j==total_data)
 			break;
+
+		ptp_start_window = ptp_end_window;
+		ptp_erspan_start_window = ptp_erspan_end_window;
 	}		
 			
 }
@@ -293,8 +323,6 @@ int main(int argc, char *argv[]){
 	 */
 	while ((packet = pcap_next(pcap, &header)) != NULL)
 		getPTPTimestamps(packet, header.caplen);	
-
-	exit(1);
 
 	/*Read Data Packets*/
 	for(i=4;i<argc;i++){ 
