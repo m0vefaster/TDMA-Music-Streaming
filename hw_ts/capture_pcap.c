@@ -221,7 +221,7 @@ void writeToFile(char *output_file){
 	unsigned char *validSamples;
 	int expectedValid = expected/multFactor;
 	validSamples = (unsigned char *) malloc(expected * sizeof(unsigned char));
-	uint64_t start = timeStamps_Data[1];
+	uint64_t start = timeStamps_Data[1]-6000;
 	int nightTimePackets = 0;
 	int slot = 0;
 
