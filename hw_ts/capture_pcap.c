@@ -43,7 +43,6 @@ int getSourceIP(const u_char *Buffer , int Size) {
 	char *sourceIP = inet_ntoa(dest.sin_addr); 
 	int last_octet=  atoi(strrchr(sourceIP,'.')+1);   
 
-	//fprintf(logfp,"\n%d", last_octet);
 	return last_octet;
 }
 
@@ -113,17 +112,12 @@ void getPTPTimestamps(const unsigned char *buffer, unsigned int size) {
         memcpy(&x, type,2);
 	
 	uint16_t ptp_type = ntohs(x);
-	//fprintf(logfp,"%" PRIu16 "\n", ptp_type); 
 
 	if(ptp_type==35063 && buffer[76]==0){ 
 		//Match PTP Sync Type
 		
 		uint64_t erspan = getERSPANTimestamp(buffer,size);
-		
 		timeStamps_PTP_ERSPAN[total_ptp] = erspan;
-		
-		//fprintf(logfp,"\n%" PRIu64 , ptp);
-		fprintf(logfp,"\n\nERSPAN Sync%" PRIu64 "\n", erspan);
 	}
 
 	if(ptp_type==35063 && buffer[76]==8){ 
@@ -133,8 +127,6 @@ void getPTPTimestamps(const unsigned char *buffer, unsigned int size) {
 		
 		timeStamps_PTP[total_ptp] = ptp;
 		total_ptp++;
-		fprintf(logfp,"\nPTP Follow:%" PRIu64 , ptp);
-		//fprintf(logfp,"\n%" PRIu64 "\n", erspan);
 	} 
 
 }
@@ -153,9 +145,9 @@ void adjustToAbsoluteTimeStamps(){
 		uint64_t ptp_end_window = timeStamps_PTP[i];
 		uint64_t ptp_erspan_end_window = timeStamps_PTP_ERSPAN[i];
 				
-		fprintf(logfp, "\n\nStart of window is %" PRIu64 "\n", ptp_erspan_start_window); 
-		fprintf(logfp, "\n\nStart of window PTP is %" PRIu64 "\n", ptp_start_window); 
-		fprintf(logfp, "\nFirst timestamp data is %" PRIu64 "\n", timeStamps_Data[j]);
+		//fprintf(logfp, "\n\nStart of window is %" PRIu64 "\n", ptp_erspan_start_window); 
+		//fprintf(logfp, "\n\nStart of window PTP is %" PRIu64 "\n", ptp_start_window); 
+		//fprintf(logfp, "\nFirst timestamp data is %" PRIu64 "\n", timeStamps_Data[j]);
 		
 
 		int packets_window = 0;
@@ -165,18 +157,19 @@ void adjustToAbsoluteTimeStamps(){
 			packets_window++;
 		}
 
-		fprintf(logfp, "\nNumber of packets is window is %d", packets_window);	
+		//fprintf(logfp, "\nNumber of packets is window is %d", packets_window);	
 
 		if (packets_window!=0) {
 		
 			float drift = (uint64_t)(ptp_end_window-ptp_start_window) - (uint64_t)(ptp_erspan_end_window - ptp_erspan_start_window) ;
+			/*
 			fprintf(logfp, "\nPTP ERSPAN Start Window is %" PRIu64 "\n", ptp_erspan_start_window);
 			fprintf(logfp, "\nPTP ERSPAN End Window is %" PRIu64 "\n", ptp_erspan_end_window);
 			fprintf(logfp, "\nPTP Start Window is %" PRIu64 "\n", ptp_start_window);
 			fprintf(logfp, "\nPTP End Window is %" PRIu64 "\n", ptp_end_window);
 			fprintf(logfp, "\ntimeStamps_Data[k]  is %" PRIu64 "\n", timeStamps_Data[start_pos]);
 			fprintf(logfp, "\nDrift is %f", drift);	
-			
+			*/
 			for(k=start_pos; k<j;k++){
 
 				int64_t temp1 =  (ptp_erspan_end_window - ptp_erspan_start_window);
@@ -184,18 +177,11 @@ void adjustToAbsoluteTimeStamps(){
 				float temp1_f = temp1;
 				float temp2_f = temp2;
 				float temp3_f = (double)drift;
-				fprintf(logfp, "\n\n\ntemp1_f is %f", temp1_f);
-				fprintf(logfp, "\ntemp2_f is %f", temp2_f);
-				fprintf(logfp, "\ntemp3_f is %f", temp3_f);
 				float temp = temp2_f/temp1_f;
-				fprintf(logfp, "\ntemp is %f", temp);
 				float temp4_f = temp * temp3_f;
-				fprintf(logfp, "\ntemp4_f is %f", temp4_f);
 				uint64_t offset = ptp_start_window - ptp_erspan_start_window;
-				fprintf(logfp, "\nOffset is %" PRIu64 "\n", offset);
 				int temp5 = temp4_f;
 				offset += temp5;
-				fprintf(logfp, "\nOffset is %" PRIu64 "\n", offset);
 				timeStamps_Data[k]  += offset;	
 			}
 		
@@ -221,7 +207,8 @@ void writeToFile(char *output_file){
 	unsigned char *validSamples;
 	int expectedValid = expected/multFactor;
 	validSamples = (unsigned char *) malloc(expected * sizeof(unsigned char));
-	uint64_t start = timeStamps_Data[1]-6000;
+	uint64_t BASIC_OFFSET = 6000;//Shifting the first window by 6us 
+	uint64_t start = timeStamps_Data[1]-BASIC_OFFSET;
 	int nightTimePackets = 0;
 	int slot = 0;
 
@@ -234,12 +221,12 @@ void writeToFile(char *output_file){
 		validSamples[total_dataSamples++]= samples[i];
 
 		fprintf(logfp,"\nSlot %d has value %u\n",slot, samples[i]);
-		fprintf(logfp,"%" PRIu64 "\n", timeStamps_Data[i]);
-		fprintf(logfp,"%" PRIu64 "\n", (start+timeSlot));
+		//fprintf(logfp,"%" PRIu64 "\n", timeStamps_Data[i]);
+		//fprintf(logfp,"%" PRIu64 "\n", (start+timeSlot));
 		fprintf(logfp,"\nDay Time Packets:");
 		while(timeStamps_Data[i] < (start +timeSlot)){
-			fprintf(logfp,"%u", samples[i]);
-			fprintf(logfp,"(%" PRIu64 ") ", timeStamps_Data[i]);
+			fprintf(logfp,"%u ", samples[i]);
+			//fprintf(logfp,"(%" PRIu64 ") ", timeStamps_Data[i]);
 			i++;	
 		}
 		
@@ -248,8 +235,8 @@ void writeToFile(char *output_file){
 		//nightTime Packets
 		fprintf(logfp,"\nNight Time Packets:");
 		while(timeStamps_Data[i] < (start + timeSlot)){
-			fprintf(logfp,"%u", samples[i]);
-			fprintf(logfp,"(%" PRIu64 ") ", timeStamps_Data[i]);
+			fprintf(logfp,"%u ", samples[i]);
+			//fprintf(logfp,"(%" PRIu64 ") ", timeStamps_Data[i]);
 			nightTimePackets++;
 			i++;
 		}
