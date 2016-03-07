@@ -135,7 +135,8 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
     	
     } 
 
-    if (total==expected && written==0){//numFrames){
+    //Writing max of 400000 packets
+    if ((total == (expected/10)) && written==0){//numFrames){
 	printf("\nTotal is:%d", total);
 	writeToFile();
 	written=1;
@@ -238,11 +239,44 @@ void writeToFile(){
 	unsigned char *validSamples;
 	int expectedValid = expected/multFactor;
 	validSamples = (unsigned char *) malloc(expected * sizeof(unsigned char));
-	for(i=0;i<expected;i++){
+	uint64_t start = timeStamps[1];
+	int nightTimePackets = 0;
+	int slot = 0;
+	fprintf(logfp, "\nTimeslot is: %d", timeSlot);
+	fprintf(logfp, "\nstart is");
+	fprintf(logfp,"%" PRIu64 "\n", start);
+	for(i=2;i<expected;i++){
+		
+		validSamples[totalSamples++]= samples[i];
+
+		fprintf(logfp,"\nSlot %d has value %u\n",slot, samples[i]);
+		fprintf(logfp,"%" PRIu64 "\n", timeStamps[i]);
+		
+		fprintf(logfp,"%" PRIu64 "\n", (start+timeSlot));
+
+		while(timeStamps[i] < (start +timeSlot)){
+			fprintf(logfp,"%u ", samples[i]);
+			i++;	
+		}
+		
+		start += timeSlot;
+
+		//nightTime Packets
+		fprintf(logfp,"Night Time Packets:");
+		while(timeStamps[i] < (start + timeSlot)){
+			fprintf(logfp,"%u ", samples[i]);
+			nightTimePackets++;
+			i++;
+		}
 
 		if(totalSamples> expectedValid)
 			break;
 
+		fprintf(logfp,"\n\n");
+		start += timeSlot;
+		slot++;
+	
+		/*
 		uint64_t diff = timeStamps[i]-prev;
 		if (diff > timeSlot){
 			fprintf(logfp,"\n\n New sample, Time difference was");
@@ -252,8 +286,9 @@ void writeToFile(){
 
 		prev = timeStamps[i];
 		fprintf(logfp,"%u ",samples[i]);
+		*/
 	} 
-
+	fprintf(logfp,"\nNight Time Packets are %d", nightTimePackets);
 	printf("\nFound all valid Samples...");
 
 	// Write to a new file
