@@ -156,13 +156,13 @@ void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRa
 	uint64_t time_slot =  (1000000000 / sampleRate); 
 
 	memset(fixed_quanta,0, num_hosts_plus*sizeof(uint32_t));
+
 	j=0;
 	for(i=0;i<num_hosts_plus;i++){
 		host_ids[j] = j;
-		printf("\n host_ids[j]= %hu",  host_ids[j]);
+		//printf("\n host_ids[j]= %hu",  host_ids[j]);
 		j++;
 	}
-
 
 	printf("\n\nStarting register_client");
 	memset(fixed_quanta,0, num_hosts_plus*sizeof(uint32_t));
@@ -186,6 +186,9 @@ void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRa
 		fprintf(stderr, "Error creating thread\n");
 		exit(1);
 	}
+	
+	uint64_t first_timeSlot = now + offset;
+	printf("\nFirst slot starts at: %" PRIu64 "\n", first_timeSlot);	
 
 	printf("pthread created");
 	/*
@@ -231,7 +234,7 @@ void HandleTCPClient(int clntSocket, unsigned char *buffer,int len, int sampleRa
 		//fprintf(logfp,"\n%d Start time, End time and buffer[i] are:", i);
 		//fprintf(logfp,"%" PRIu64 "\n", start_time);
 		//fprintf(logfp, "%" PRIu64 "\n", end_time);
-		fprintf(logfp,"%d %u\n",i, pos);
+		fprintf(logfp,"%u\n",pos);
 		fflush(logfp);
 		/*	
 		//Ignoring tx_update
@@ -352,8 +355,8 @@ int main(int argc, char *argv[])
 	}
 
 	// Output Info
-	printf("Read %ld frames from %s, Sample rate: %d, Length: %fs",
-		numFrames, argv[1], sndInfo.samplerate, (float)numFrames/sndInfo.samplerate);
+	printf("Read %ld frames from %s, Sample rate: %d, Length: %fs, Format:%d ",
+		numFrames, argv[1], sndInfo.samplerate, (float)numFrames/sndInfo.samplerate, sndInfo.format);
 
 	// Send the data	
 	printf("\nStarting the server..\n");
